@@ -1,0 +1,16 @@
+{
+  "name": "my-tardi-game",
+  "version": "0.0.0",
+  "description": "A fun Tardi game.",
+  "private": true,
+  "scripts": {
+    "build": "tardi-build",
+    "dev": "tardi-build dev"
+  },
+  "dependencies": {
+    "@juxhouse/tardi-core": "*"
+  },
+  "devDependencies": {
+    "@juxhouse/tardi-build": "*"
+  }
+}
