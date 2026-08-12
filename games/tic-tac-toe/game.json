@@ -1,8 +1,0 @@
-{
-  "title": "Tic-Tac-Toe",
-  "description": "The classic 3x3 game. A minimal Tardi game you can fork.",
-  "players": {
-    "min": 2,
-    "max": 2
-  }
-}

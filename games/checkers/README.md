@@ -1,9 +1,9 @@
-# Tic-Tac-Toe — a minimal Tardi game
+# Checkers — a minimal Tardi game
 
 A minimal, complete Tardi game you can fork to build your own. It is two-player
-tic-tac-toe in a few small files, and it shows the whole shape of a Tardi game:
-a **table** (the TV display), a **hand** (each player's controller), and
-**shared** modules used by both.
+checkers in a few small files, and it shows the whole shape of a Tardi game: a
+**table** (the TV display), a **hand** (each player's controller), and **shared**
+modules used by both.
 
 ## Layout
 
@@ -14,8 +14,8 @@ src/
   table.js           the TV display: owns the game state
   hand.js            a player's controller: renders and sends taps
   shared/
-    tic-tac-toe-rules.js  game rules (winner, draw) — used by table AND hand
-    board.js              the responsive 3x3 board UI — used by table AND hand
+    checkers-rules.js  move rules, captures, kings, victory checks
+    board.js           the responsive 8x8 board UI — used by table AND hand
 dist/                Build output: hand.js, table.js, plus copies of game.json and assets/.
 ```
 

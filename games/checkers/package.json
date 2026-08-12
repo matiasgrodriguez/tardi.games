@@ -1,7 +1,7 @@
 {
-  "name": "my-tardi-game",
+  "name": "checkers",
   "version": "0.0.0",
-  "description": "A fun Tardi game.",
+  "description": "A two-player Tardi checkers game.",
   "private": true,
   "scripts": {
     "build": "tardi-build",
