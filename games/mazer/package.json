@@ -1,0 +1,16 @@
+{
+  "name": "tardi-game-mazer",
+  "version": "0.0.0",
+  "description": "Mazer, a Tardi game.",
+  "private": true,
+  "scripts": {
+    "build": "tardi-build",
+    "dev": "tardi-build dev"
+  },
+  "dependencies": {
+    "@juxhouse/tardi-core": "*"
+  },
+  "devDependencies": {
+    "@juxhouse/tardi-build": "*"
+  }
+}

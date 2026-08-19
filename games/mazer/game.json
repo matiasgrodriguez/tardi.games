@@ -1,0 +1,8 @@
+{
+  "title": "Mazer",
+  "description": "Predict where the laser exits a shifting mirror maze before time runs out.",
+  "players": {
+    "min": 1,
+    "max": 4
+  }
+}
