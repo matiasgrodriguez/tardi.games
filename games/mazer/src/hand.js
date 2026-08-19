@@ -1,6 +1,6 @@
 import { joinMatch, sendToTable } from '@juxhouse/tardi-core/hand'
 import { createMazerBoard } from './shared/mazer-board.js'
-import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidTarget } from './shared/mazer-geometry.js'
+import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from './shared/mazer-geometry.js'
 
 ;(function () {
   var LASER_CELLS_PER_VELOCITY_TICK = 10
@@ -12,14 +12,14 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
   var simulationRound = 0
   var simulationStartedAt = 0
   var simulationTimerId = 0
+  var countdownTimerId = 0
 
   var root = createNode('main', 'mazer-hand')
   var header = createNode('header', 'mazer-header')
   var title = createNode('h1', 'mazer-title')
   var status = createNode('p', 'mazer-status')
+  var countdown = createNode('div', 'mazer-countdown mazer-countdown-hidden')
   var boardHost = createNode('div', 'mazer-board-host')
-  var footer = createNode('footer', 'mazer-footer')
-  var guessText = createNode('p', 'mazer-guess-text')
   var board = createMazerBoard({
     interactive: true,
     onTargetSelected: onBoardTargetSelected,
@@ -30,10 +30,9 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
   root.appendChild(header)
   header.appendChild(title)
   header.appendChild(status)
+  header.appendChild(countdown)
   root.appendChild(boardHost)
   boardHost.appendChild(board.element)
-  root.appendChild(footer)
-  footer.appendChild(guessText)
   render()
 
   joinMatch({
@@ -50,9 +49,16 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
       myGuess = state.round.guessesByPlayerId[envelope.playerId]
 
       if (state.phase === 'simulating' && state.round.number !== simulationRound) {
+        stopCountdown()
         startSimulationAnimation(state.round.number)
       } else if (state.phase !== 'simulating') {
         stopSimulationAnimation()
+      }
+
+      if (state.phase === 'guessing') {
+        startCountdown()
+      } else {
+        stopCountdown()
       }
 
       if (state.round.number !== submittedRound && !myGuess) {
@@ -61,6 +67,7 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
       }
     } else {
       stopSimulationAnimation()
+      stopCountdown()
     }
 
     render()
@@ -102,23 +109,132 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
 
   function render() {
     var state = getTableState()
-    var myGuess = getMyGuess()
     var phase = state ? state.phase : 'loading'
 
     root.className = 'mazer-hand mazer-hand-' + phase
     title.textContent = state && state.name ? state.name : 'Mazer'
-    status.textContent = state && state.statusText ? state.statusText : 'Connecting to table.'
+    status.textContent = getStatusText(state, phase)
+    renderCountdown()
     board.render(createRenderState(state), selectedTarget)
+  }
 
-    if (phase === 'simulating') {
-      guessText.textContent = 'Laser firing...'
-    } else if (myGuess) {
-      guessText.textContent = 'Guess locked: ' + formatTarget(myGuess.target)
-    } else if (selectedTarget) {
-      guessText.textContent = 'Guess locked: ' + formatTarget(selectedTarget)
-    } else {
-      guessText.textContent = 'Tap an outer coordinate to predict the exit.'
+  function getStatusText(state, phase) {
+    if (phase === 'guessing') {
+      return 'Tap an outer coordinate to predict where the laser exists before your opponent does.'
     }
+
+    if (phase === 'scoring') {
+      return getScoringStatusText(state)
+    }
+
+    return state && state.statusText ? state.statusText : 'Connecting to table.'
+  }
+
+  function getScoringStatusText(state) {
+    var missedText = getMissedStatusText(state)
+    var winner = getCorrectPlayer(state)
+
+    if (state && state.round && state.round.resolutionReason === 'timeout') {
+      return 'Round timed out.'
+    }
+
+    if (winner) {
+      if (latestEnvelope && winner.playerId === latestEnvelope.playerId) {
+        return 'You won.'
+      }
+
+      return winner.nick + ' won.'
+    }
+
+    if (missedText) {
+      return missedText
+    }
+
+    return state && state.statusText ? state.statusText : 'Next board incoming.'
+  }
+
+  function getCorrectPlayer(state) {
+    var players = state && state.players ? state.players : []
+    var guessesByPlayerId = state && state.round ? state.round.guessesByPlayerId : {}
+    var index
+    var player
+    var guess
+
+    for (index = 0; index < players.length; index += 1) {
+      player = players[index]
+      guess = guessesByPlayerId[player.playerId]
+
+      if (guess && guess.correct === true) {
+        return player
+      }
+    }
+
+    return null
+  }
+
+  function getMissedStatusText(state) {
+    var missedPlayers = getMissedPlayers(state)
+
+    if (missedPlayers.length < 1) {
+      return ''
+    }
+
+    if (latestEnvelope && containsPlayer(missedPlayers, latestEnvelope.playerId)) {
+      return 'You missed the target.'
+    }
+
+    if (missedPlayers.length === 1) {
+      return missedPlayers[0].nick + ' missed the target.'
+    }
+
+    return formatPlayerNames(missedPlayers) + ' missed the target.'
+  }
+
+  function getMissedPlayers(state) {
+    var players = state && state.players ? state.players : []
+    var guessesByPlayerId = state && state.round ? state.round.guessesByPlayerId : {}
+    var missedPlayers = []
+    var index
+    var player
+    var guess
+
+    for (index = 0; index < players.length; index += 1) {
+      player = players[index]
+      guess = guessesByPlayerId[player.playerId]
+
+      if (guess && guess.correct === false) {
+        missedPlayers.push(player)
+      }
+    }
+
+    return missedPlayers
+  }
+
+  function containsPlayer(players, playerId) {
+    var index
+
+    for (index = 0; index < players.length; index += 1) {
+      if (players[index].playerId === playerId) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  function formatPlayerNames(players) {
+    var names = []
+    var index
+
+    for (index = 0; index < players.length; index += 1) {
+      names.push(players[index].nick)
+    }
+
+    if (names.length === 2) {
+      return names[0] + ' and ' + names[1]
+    }
+
+    return names.slice(0, names.length - 1).join(', ') + ', and ' + names[names.length - 1]
   }
 
   function createRenderState(state) {
@@ -143,6 +259,7 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
         correctTarget: null,
         guessesByPlayerId: state.round.guessesByPlayerId,
         endsAt: state.round.endsAt,
+        resolutionReason: state.round.resolutionReason,
       },
       players: state.players,
       scoresByPlayerId: state.scoresByPlayerId,
@@ -184,6 +301,43 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
     }
   }
 
+  function startCountdown() {
+    if (!countdownTimerId) {
+      countdownTimerId = window.setInterval(renderCountdown, 250)
+    }
+
+    renderCountdown()
+  }
+
+  function stopCountdown() {
+    if (countdownTimerId) {
+      window.clearInterval(countdownTimerId)
+      countdownTimerId = 0
+    }
+  }
+
+  function renderCountdown() {
+    var state = getTableState()
+    var remainingMs
+    var seconds
+
+    if (!state || state.phase !== 'guessing' || !state.round) {
+      countdown.textContent = ''
+      countdown.className = 'mazer-countdown mazer-countdown-hidden'
+      return
+    }
+
+    remainingMs = Number(state.round.endsAt) - Date.now()
+
+    if (remainingMs < 0) {
+      remainingMs = 0
+    }
+
+    seconds = Math.ceil(remainingMs / 1000)
+    countdown.className = seconds <= 3 ? 'mazer-countdown mazer-countdown-low' : 'mazer-countdown'
+    countdown.textContent = String(seconds)
+  }
+
   function getVisibleLaserPath(path) {
     var elapsed
     var visibleCount
@@ -212,15 +366,16 @@ import { clearNode, createNode, formatTarget, getVisibleLaserCellCount, isValidT
 
     style.textContent =
       ':root{font-size:calc(6px + 1.2vmin)}' +
-      'html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071512;color:#f8fafc;font-family:Arial,sans-serif}' +
+      'html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
       '.mazer-hand{width:100%;height:100%;box-sizing:border-box;padding:14px;display:block}' +
       '.mazer-hand-simulating .mazer-board-host{animation:mazer-hand-fire 180ms linear 1}' +
-      '.mazer-header{height:16%;min-height:78px}' +
-      '.mazer-title{margin:0;font-size:3.3rem;line-height:1;font-weight:900}' +
-      '.mazer-status{margin:8px 0 0;font-size:1.4rem;line-height:1.2;color:#d5f3e5}' +
-      '.mazer-board-host{height:64%}' +
-      '.mazer-footer{height:20%;box-sizing:border-box;padding-top:12px}' +
-      '.mazer-guess-text{margin:0;font-size:1.5rem;line-height:1.25;color:#e5e7eb}' +
+      '.mazer-header{position:relative;height:16%;min-height:78px;padding-right:70px;box-sizing:border-box}' +
+      '.mazer-title{margin:0;font-size:2.2rem;line-height:1;font-weight:900}' +
+      '.mazer-status{margin:7px 0 0;font-size:1.4rem;line-height:1.2;color:#d5f3e5}' +
+      '.mazer-countdown{position:absolute;top:0;right:0;min-width:54px;height:54px;border:3px solid #64748b;border-radius:8px;background:#111827;color:#f8fafc;font-size:2.6rem;line-height:54px;text-align:center;font-weight:900}' +
+      '.mazer-countdown-low{border-color:#f97316;color:#fed7aa}' +
+      '.mazer-countdown-hidden{display:none}' +
+      '.mazer-board-host{height:84%}' +
       '@keyframes mazer-hand-fire{0%{filter:brightness(1)}35%{filter:brightness(1.7)}100%{filter:brightness(1)}}'
     document.head.appendChild(style)
   }

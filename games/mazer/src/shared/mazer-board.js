@@ -6,6 +6,8 @@ var BASE_GRAY = 50
 var CELL_GAP = 0
 var LASER_AMBER = { r: 255, g: 176, b: 0 }
 var LASER_AMBER_RGB = 'rgb(255,176,0)'
+var SELECTED_TARGET_BLUE = { r: 20, g: 104, b: 130 }
+var WRONG_TARGET_RED = { r: 220, g: 38, b: 38 }
 var CANNON_SLIDE_CELLS_PER_100_MS = 8
 var CANNON_SLIDE_CELL_MS = 100 / CANNON_SLIDE_CELLS_PER_100_MS
 
@@ -160,7 +162,9 @@ export function createMazerBoard(options) {
       [],
       view.glowAll,
       view.glowSprite,
-      view.selectedSprite
+      view.selectedSprite,
+      view.selectedSpriteSide,
+      view.selectedSpriteColor
     )
   }
 
@@ -176,6 +180,8 @@ export function createMazerBoard(options) {
     var glowAll = false
     var glowSprite = false
     var selectedSprite = false
+    var selectedSpriteSide = ''
+    var selectedSpriteColor = null
     var signature
 
     if (cannon && targetsEqual(cannon, target)) {
@@ -190,10 +196,18 @@ export function createMazerBoard(options) {
     } else if (selectedTarget && targetsEqual(selectedTarget, target)) {
       className += ' mazer-edge-selected'
       selectedSprite = true
+      selectedSpriteSide = target.side
+      selectedSpriteColor = SELECTED_TARGET_BLUE
+
+      if (state && state.phase === 'scoring' && guess && guess.correct === false) {
+        className += ' mazer-edge-selected-wrong'
+        selectedSpriteColor = WRONG_TARGET_RED
+      }
     } else if (state && state.phase === 'scoring' && guess && guess.correct === false) {
       className += ' mazer-edge-wrong'
-      baseColor = { r: 220, g: 38, b: 38 }
-      variationRange = 16
+      selectedSprite = true
+      selectedSpriteSide = target.side
+      selectedSpriteColor = WRONG_TARGET_RED
     }
 
     signature = className + '|' +
@@ -202,7 +216,9 @@ export function createMazerBoard(options) {
       arrowSide + '|' +
       boolSignature(glowAll) + '|' +
       boolSignature(glowSprite) + '|' +
-      boolSignature(selectedSprite)
+      boolSignature(selectedSprite) + '|' +
+      selectedSpriteSide + '|' +
+      colorSignature(selectedSpriteColor)
 
     return {
       className: className,
@@ -212,6 +228,8 @@ export function createMazerBoard(options) {
       glowAll: glowAll,
       glowSprite: glowSprite,
       selectedSprite: selectedSprite,
+      selectedSpriteSide: selectedSpriteSide,
+      selectedSpriteColor: selectedSpriteColor,
       signature: signature,
     }
   }
@@ -253,11 +271,13 @@ export function createMazerBoard(options) {
       pathSteps,
       false,
       false,
-      false
+      false,
+      '',
+      null
     )
   }
 
-  function updateInnerCells(record, seedX, seedY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite) {
+  function updateInnerCells(record, seedX, seedY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite, selectedSpriteSide, selectedSpriteColor) {
     var innerY
     var innerX
     var index
@@ -277,19 +297,21 @@ export function createMazerBoard(options) {
           pathSteps,
           glowAll,
           glowSprite,
-          selectedSprite
+          selectedSprite,
+          selectedSpriteSide,
+          selectedSpriteColor
         )
       }
     }
   }
 
-  function updateInnerCell(inner, seedX, seedY, innerX, innerY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite) {
+  function updateInnerCell(inner, seedX, seedY, innerX, innerY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite, selectedSpriteSide, selectedSpriteColor) {
     var isCannonSprite = isCannonSpriteCell(arrowSide, innerX, innerY)
     var isLaserSprite = isLaserSpriteCell(pathSteps || [], innerX, innerY)
     var mirrorTriangles = getMirrorTriangles(pathSteps || [], innerX, innerY)
     var isMirrorGlowSuppressed = isMirrorGlowSuppressedCell(pathSteps || [], innerX, innerY)
-    var isSelectedSprite = selectedSprite && isSelectedSpriteCell(innerX, innerY)
-    var innerBaseColor = getInnerBaseColor(baseColor, isCannonSprite, isLaserSprite && mirrorTriangles.length < 1, isSelectedSprite)
+    var isSelectedSprite = selectedSprite && isSelectedSpriteCell(selectedSpriteSide, innerX, innerY)
+    var innerBaseColor = getInnerBaseColor(baseColor, isCannonSprite, isLaserSprite && mirrorTriangles.length < 1, isSelectedSprite, selectedSpriteColor)
     var className = 'mazer-inner-cell'
 
     clearNode(inner)
@@ -589,7 +611,7 @@ export function createMazerBoard(options) {
     return !!(round && round.laserPath && round.laserPath.length > 0)
   }
 
-  function getInnerBaseColor(baseColor, isCannonSprite, isLaserSprite, isSelectedSprite) {
+  function getInnerBaseColor(baseColor, isCannonSprite, isLaserSprite, isSelectedSprite, selectedSpriteColor) {
     if (isLaserSprite) {
       return LASER_AMBER
     }
@@ -599,7 +621,7 @@ export function createMazerBoard(options) {
     }
 
     if (isSelectedSprite) {
-      return { r: 56, g: 189, b: 248 }
+      return selectedSpriteColor || SELECTED_TARGET_BLUE
     }
 
     return baseColor
@@ -621,25 +643,37 @@ export function createMazerBoard(options) {
     return variationRange
   }
 
-  function isSelectedSpriteCell(innerX, innerY) {
-    return innerX === innerY || innerX + innerY === 2
+  function isSelectedSpriteCell(side, innerX, innerY) {
+    if (side === 'left') {
+      return innerY !== 1 || innerX === 0
+    }
+
+    if (side === 'right') {
+      return innerY !== 1 || innerX === 2
+    }
+
+    if (side === 'top') {
+      return innerX !== 1 || innerY === 0
+    }
+
+    return innerX !== 1 || innerY === 2
   }
 
   function isCannonSpriteCell(side, innerX, innerY) {
     if (side === 'left') {
-      return (innerY !== 1 && innerX < 2) || (innerY === 1 && innerX > 0)
+      return innerY === 1 || innerX === 0
     }
 
     if (side === 'right') {
-      return (innerY !== 1 && innerX > 0) || (innerY === 1 && innerX < 2)
+      return innerY === 1 || innerX === 2
     }
 
     if (side === 'top') {
-      return (innerX !== 1 && innerY < 2) || (innerX === 1 && innerY > 0)
+      return innerX === 1 || innerY === 0
     }
 
     if (side === 'bottom') {
-      return (innerX !== 1 && innerY > 0) || (innerX === 1 && innerY < 2)
+      return innerX === 1 || innerY === 2
     }
 
     return false
@@ -978,6 +1012,10 @@ export function createMazerBoard(options) {
   }
 
   function colorSignature(color) {
+    if (!color) {
+      return ''
+    }
+
     return String(color.r) + ',' + String(color.g) + ',' + String(color.b)
   }
 

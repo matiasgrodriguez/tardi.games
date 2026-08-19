@@ -33,7 +33,6 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
   var boardHost = createNode('div', 'mazer-board-host')
   var sidePanel = createNode('aside', 'mazer-side')
   var scoreboard = createNode('div', 'mazer-scoreboard')
-  var guesses = createNode('div', 'mazer-guesses')
   var board = createMazerBoard({
     interactive: false,
   })
@@ -48,7 +47,6 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
   boardHost.appendChild(board.element)
   content.appendChild(sidePanel)
   sidePanel.appendChild(scoreboard)
-  sidePanel.appendChild(guesses)
   render()
 
   startMatch({
@@ -102,7 +100,7 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
     }
 
     if (players.length > 1 || countGuesses() >= players.length) {
-      resolveRound()
+      resolveRound('guess')
       return
     }
 
@@ -118,12 +116,16 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
     mirrorCount = STARTING_MIRRORS + ((roundNumber - 1) * MIRRORS_ADDED_PER_ROUND)
     round = createRound(roundNumber, mirrorCount)
     phase = 'guessing'
-    timerId = window.setTimeout(resolveRound, GUESS_MS)
+    timerId = window.setTimeout(resolveRoundFromTimeout, GUESS_MS)
     startCountdown()
     broadcast()
   }
 
-  function resolveRound() {
+  function resolveRoundFromTimeout() {
+    resolveRound('timeout')
+  }
+
+  function resolveRound(reason) {
     if (phase !== 'guessing' || !round) {
       return
     }
@@ -132,6 +134,7 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
     stopCountdown()
     phase = 'simulating'
     round.simulationStartedAt = Date.now()
+    round.resolutionReason = reason || ''
     markCorrectGuesses()
     startLaserAnimation()
     broadcast()
@@ -165,6 +168,7 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
       correctTarget: traced.target,
       guessesByPlayerId: {},
       endsAt: Date.now() + GUESS_MS,
+      resolutionReason: '',
       simulationStartedAt: 0,
       scored: false,
     }
@@ -413,6 +417,7 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
         correctTarget: shouldSendCorrectTarget() ? cloneTarget(round.correctTarget) : null,
         guessesByPlayerId: cloneGuesses(round.guessesByPlayerId),
         endsAt: round.endsAt,
+        resolutionReason: round.resolutionReason,
       } : null,
       players: getPlayerSummaries(),
       scoresByPlayerId: cloneScores(),
@@ -427,7 +432,6 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
     renderCountdown()
     board.render(createTableRenderState(state), null)
     renderScoreboard(state)
-    renderGuesses(state)
   }
 
   function createTableRenderState(state) {
@@ -463,6 +467,7 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
       correctTarget: visiblePath.length >= fullPathLength ? correctTarget : null,
       guessesByPlayerId: sourceRound.guessesByPlayerId,
       endsAt: sourceRound.endsAt,
+      resolutionReason: sourceRound.resolutionReason,
     }
   }
 
@@ -491,26 +496,6 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
     }
   }
 
-  function renderGuesses(state) {
-    var heading = createNode('h2', 'mazer-panel-title')
-    var index
-    var player
-    var row
-    var guess
-
-    heading.textContent = 'Guesses'
-    clearNode(guesses)
-    guesses.appendChild(heading)
-
-    for (index = 0; index < state.players.length; index += 1) {
-      player = state.players[index]
-      guess = state.round ? state.round.guessesByPlayerId[player.playerId] : null
-      row = createNode('p', 'mazer-guess-row')
-      row.textContent = player.nick + ': ' + formatGuess(guess, state.phase)
-      guesses.appendChild(row)
-    }
-  }
-
   function getStatusText() {
     if (players.length < 1) {
       return 'Waiting for at least one player.'
@@ -521,37 +506,104 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
     }
 
     if (phase === 'guessing') {
-      return 'Round ' + round.number + ': choose where the laser exits.'
+      return 'Players are predicting the laser exit.'
     }
 
     if (phase === 'simulating') {
-      return 'Laser firing.'
+      return getResolutionStatusText()
     }
 
     if (phase === 'scoring') {
-      return 'Correct target: ' + formatTarget(round.correctTarget) + '. Next board incoming.'
+      return getResolutionStatusText()
     }
 
     return 'Waiting for players.'
   }
 
-  function formatGuess(guess, currentPhase) {
-    if (!guess) {
-      return currentPhase === 'guessing' ? 'thinking' : 'no guess'
+  function getResolutionStatusText() {
+    var winner
+    var missedPlayers
+
+    if (round && round.resolutionReason === 'timeout') {
+      return 'Round timed out.'
     }
 
-    if (guess.correct === true) {
-      return formatTarget(guess.target) + ' correct'
+    winner = getCorrectPlayer()
+
+    if (winner) {
+      return winner.nick + ' won.'
     }
 
-    if (guess.correct === false) {
-      return formatTarget(guess.target) + ' wrong'
+    missedPlayers = getMissedPlayers()
+
+    if (missedPlayers.length === 1) {
+      return missedPlayers[0].nick + ' missed the target.'
     }
 
-    return 'locked'
+    if (missedPlayers.length > 1) {
+      return formatPlayerNames(missedPlayers) + ' missed the target.'
+    }
+
+    return 'Round resolved.'
   }
 
+  function getCorrectPlayer() {
+    var index
+    var player
+    var guess
 
+    if (!round) {
+      return null
+    }
+
+    for (index = 0; index < players.length; index += 1) {
+      player = players[index]
+      guess = round.guessesByPlayerId[player.playerId]
+
+      if (guess && guess.correct === true) {
+        return player
+      }
+    }
+
+    return null
+  }
+
+  function getMissedPlayers() {
+    var missedPlayers = []
+    var index
+    var player
+    var guess
+
+    if (!round) {
+      return missedPlayers
+    }
+
+    for (index = 0; index < players.length; index += 1) {
+      player = players[index]
+      guess = round.guessesByPlayerId[player.playerId]
+
+      if (guess && guess.correct === false) {
+        missedPlayers.push(player)
+      }
+    }
+
+    return missedPlayers
+  }
+
+  function formatPlayerNames(playersToFormat) {
+    var names = []
+    var index
+
+    for (index = 0; index < playersToFormat.length; index += 1) {
+      names.push(playersToFormat[index].nick)
+    }
+
+    if (names.length === 2) {
+      return names[0] + ' and ' + names[1]
+    }
+
+    return names.slice(0, names.length - 1).join(', ') + ', and ' + names[names.length - 1]
+  }
 
   function shouldSendLaserPath() {
     return phase === 'simulating' || phase === 'scoring'
@@ -803,11 +855,10 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
       '.mazer-board-host{display:inline-block;vertical-align:top;width:68%;height:100%}' +
       '.mazer-side{display:inline-block;vertical-align:top;width:29%;height:100%;margin-left:2%;box-sizing:border-box}' +
       '.mazer-panel-title{margin:0 0 1vw;font-size:1.7rem;line-height:1;color:#7dd3fc;text-transform:uppercase}' +
-      '.mazer-scoreboard,.mazer-guesses{border:2px solid #334155;border-radius:8px;background:#0f172a;padding:1.4vw;margin-bottom:1.5vw;box-sizing:border-box}' +
+      '.mazer-scoreboard{border:2px solid #334155;border-radius:8px;background:#0f172a;padding:1.4vw;margin-bottom:1.5vw;box-sizing:border-box}' +
       '.mazer-score-row{display:block;overflow:hidden;margin:.8vw 0;font-size:1.7rem;line-height:1.2}' +
       '.mazer-score-name{float:left;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
       '.mazer-score-value{float:right;color:#fde047}' +
-      '.mazer-guess-row{margin:.8vw 0;font-size:1.25rem;line-height:1.25;white-space:normal;color:#e5e7eb}' +
       '@keyframes mazer-table-fire{0%{filter:brightness(1)}35%{filter:brightness(1.7)}100%{filter:brightness(1)}}'
     document.head.appendChild(style)
   }
