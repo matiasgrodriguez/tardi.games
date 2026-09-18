@@ -1,6 +1,7 @@
 {
   "title": "Checkers",
   "description": "A two-player checkers game with captures, kings, and chained jumps.",
+  "sharedScreen": "optional",
   "players": {
     "min": 2,
     "max": 2
