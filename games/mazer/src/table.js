@@ -4,7 +4,6 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
 
 ;(function () {
   var GAME_NAME = 'Mazer'
-  var MAX_PLAYERS = 2
   var GUESS_MS = 12000
   var LASER_CELLS_PER_VELOCITY_TICK = 10
   var LASER_VELOCITY_TICK_MS = 100
@@ -55,7 +54,7 @@ import { BOARD_SIZE, clearNode, createNode, formatTarget, getVisibleLaserCellCou
   })
 
   function onPlayersChange(event) {
-    players = (event.players || []).slice(0, MAX_PLAYERS)
+    players = (event.players || []).slice()
     ensureScores()
 
     if (players.length < 1) {

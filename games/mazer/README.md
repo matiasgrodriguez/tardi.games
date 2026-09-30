@@ -1,23 +1,22 @@
 # Mazer
 
 Mazer is a timed laser prediction game. The Table generates a 9 x 9 board with
-random `/` and `\` mirrors, places a cannon on an outer coordinate, and asks one
-or two players to guess where the laser will exit.
+random `/` and `\` mirrors, places a cannon on an outer coordinate, and asks the
+players to guess where the laser will exit.
 
 The game logic is still intentionally simple and should be refined through
 playtesting.
 
 ## Current Rules
 
-- Supports one or two players.
+- Supports every player admitted by the lobby (currently two to four players).
 - Each round adds more mirrors than the previous round.
 - Cannon placement usually prefers a row or column that already contains a
   mirror, while still allowing fully random starts.
 - Both Table and Hand show the board.
 - The Hand sends the target guess immediately when the player selects an outer
   coordinate.
-- In two-player mode, the first valid guess ends the guessing phase for both
-  players.
+- The first valid guess ends the guessing phase for all players.
 - The Table shows the remaining guessing time.
 - After a valid guess, all Hands enter the simulation phase immediately and
   cannot submit more guesses.
@@ -26,7 +25,7 @@ playtesting.
   ends.
 - The Table owns the generated board, laser simulation, scoring, and timing.
 - Correct guesses earn points.
-- Wrong guesses give the other player bonus points in a two-player game.
+- Wrong or missing guesses give the other players bonus points.
 - Wrong guessed coordinates are shown in red after the round resolves.
 
 ## UI Rendering Rules

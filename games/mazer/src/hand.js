@@ -120,7 +120,7 @@ import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from '
 
   function getStatusText(state, phase) {
     if (phase === 'guessing') {
-      return 'Tap an outer coordinate to predict where the laser exists before your opponent does.'
+      return 'Tap an outer coordinate to predict where the laser exits before the other players do.'
     }
 
     if (phase === 'scoring') {
