@@ -9,7 +9,7 @@ playtesting.
 
 ## Current Rules
 
-- Supports every player admitted by the lobby (currently two to four players).
+- Supports every player admitted by the lobby (currently one to five players).
 - Each round adds more mirrors than the previous round.
 - Cannon placement usually prefers a row or column that already contains a
   mirror, while still allowing fully random starts.
