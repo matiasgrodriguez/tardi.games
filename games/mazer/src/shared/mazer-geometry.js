@@ -25,6 +25,57 @@ var LASER_VELOCITY_TICK_MS = 100
     return node
   }
 
+  function createVariedTileBackground(baseColor, tileSize, seed, variationRange) {
+    var tilesPerSide = 10
+    var size = tileSize * tilesPerSide
+    var lineColor = {
+      r: clampBackgroundColor(baseColor.r + 10),
+      g: clampBackgroundColor(baseColor.g + 10),
+      b: clampBackgroundColor(baseColor.b + 10),
+    }
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" shape-rendering="crispEdges">'
+    var x
+    var y
+    var offset
+
+    for (y = 0; y < tilesPerSide; y += 1) {
+      for (x = 0; x < tilesPerSide; x += 1) {
+        offset = stableBackgroundVariation(seed, x, y, variationRange)
+        svg += '<rect x="' + (x * tileSize) + '" y="' + (y * tileSize) + '" width="' + tileSize + '" height="' + tileSize + '" ' +
+          'fill="rgb(' +
+          clampBackgroundColor(baseColor.r + offset) + ',' +
+          clampBackgroundColor(baseColor.g + offset) + ',' +
+          clampBackgroundColor(baseColor.b + offset) + ')" ' +
+          'stroke="rgb(' + lineColor.r + ',' + lineColor.g + ',' + lineColor.b + ')" stroke-width="1"/>'
+      }
+    }
+
+    svg += '</svg>'
+    return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")'
+  }
+
+  function stableBackgroundVariation(seed, x, y, variationRange) {
+    var range = Math.max(0, Math.floor(Number(variationRange) || 0))
+    var value
+
+    if (range === 0) {
+      return 0
+    }
+
+    value = ((seed + 11) * 73856093) ^
+      ((x + 17) * 83492791) ^
+      ((y + 19) * 2654435761)
+    value = value & 0x7fffffff
+    value = value % ((range * 2) + 1)
+    return value - range
+  }
+
+  function clampBackgroundColor(value) {
+    if (value < 0) return 0
+    if (value > 255) return 255
+    return value
+  }
+
   function findGuessForTarget(guessesById, target) {
     var playerId
     var guess
@@ -140,6 +191,7 @@ export {
   cannonGlyph,
   clearNode,
   createNode,
+  createVariedTileBackground,
   findGuessForTarget,
   findMirror,
   formatTarget,

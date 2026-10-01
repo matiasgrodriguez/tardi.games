@@ -1,6 +1,6 @@
 import { joinMatch, sendToTable } from '@juxhouse/tardi-core/hand'
 import { createMazerBoard } from './shared/mazer-board.js'
-import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from './shared/mazer-geometry.js'
+import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellCount, isValidTarget } from './shared/mazer-geometry.js'
 
 ;(function () {
   var LASER_ANIMATION_TICK_MS = 35
@@ -26,6 +26,7 @@ import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from '
   })
 
   installStyles()
+  root.style.backgroundImage = createVariedTileBackground({ r: 24, g: 33, b: 40 }, 18, 41, 1)
   document.body.appendChild(root)
   root.appendChild(header)
   header.appendChild(title)
@@ -148,15 +149,48 @@ import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from '
     var button = createNode('button', 'mazer-mode-button')
     var name = createNode('strong', 'mazer-mode-name')
     var copy = createNode('span', 'mazer-mode-copy')
+    var texture = createModeTexture(value)
 
     button.type = 'button'
     button.setAttribute('data-mode', value)
     button.addEventListener('click', onModeSelected)
     name.textContent = label
     copy.textContent = description
+    button.appendChild(texture)
     button.appendChild(name)
     button.appendChild(copy)
     return button
+  }
+
+  function createModeTexture(modeValue) {
+    var layer = createNode('span', 'mazer-mode-texture')
+    var baseColor = modeValue === 'rush'
+      ? { r: 27, g: 23, b: 19 }
+      : { r: 12, g: 25, b: 39 }
+    var seed = modeValue === 'rush' ? 29 : 11
+    var index
+    var cell
+    var offset
+
+    for (index = 0; index < 48; index += 1) {
+      cell = createNode('span', 'mazer-mode-texture-cell')
+      offset = stableColorVariation(seed, index, 5)
+      cell.style.backgroundColor = 'rgb(' +
+        String(baseColor.r + offset) + ',' +
+        String(baseColor.g + offset) + ',' +
+        String(baseColor.b + offset) + ')'
+      layer.appendChild(cell)
+    }
+
+    return layer
+  }
+
+  function stableColorVariation(seed, index, range) {
+    var value = ((seed + 11) * 73856093) ^ ((index + 17) * 83492791)
+
+    value = value & 0x7fffffff
+    value = value % ((range * 2) + 1)
+    return value - range
   }
 
   function disableModeButtons() {
@@ -351,10 +385,13 @@ import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from '
     style.textContent =
       ':root{font-size:calc(6px + 1.2vmin)}' +
       'html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
-      '.mazer-hand{width:100%;height:100%;box-sizing:border-box;padding:14px;display:block}' +
+      '.mazer-hand{width:100%;height:100%;box-sizing:border-box;padding:14px;display:block;background-color:#182128}' +
       '.mazer-hand-simulating .mazer-board-host{animation:mazer-hand-fire 180ms linear 1}' +
       '.mazer-header{position:relative;height:18%;min-height:88px;padding-right:70px;box-sizing:border-box}' +
+      '.mazer-hand-choosing_mode .mazer-header{height:13%;min-height:72px;border-bottom:4px solid #334155;padding-right:0}' +
+      '.mazer-hand-choosing_mode .mazer-status,.mazer-hand-choosing_mode .mazer-round-label{display:none}' +
       '.mazer-title{display:inline-block;margin:0;font-size:2.2rem;line-height:1;font-weight:900}' +
+      '.mazer-hand-choosing_mode .mazer-title{padding:7px 10px;background:#020617;color:#f8fafc;box-shadow:5px 5px 0 #0e7490;text-transform:uppercase;letter-spacing:.08em}' +
       '.mazer-round-label{display:inline-block;margin:0 0 0 10px;font-size:1rem;color:#7dd3fc}' +
       '.mazer-status{margin:7px 0 0;font-size:1.25rem;line-height:1.2;color:#d5f3e5}' +
       '.mazer-countdown{position:absolute;top:0;right:0;min-width:54px;height:54px;border:3px solid #64748b;border-radius:8px;background:#111827;color:#f8fafc;font-size:2.6rem;line-height:54px;text-align:center;font-weight:900}' +
@@ -362,13 +399,29 @@ import { clearNode, createNode, getVisibleLaserCellCount, isValidTarget } from '
       '.mazer-countdown-hidden,.mazer-controls-hidden,.mazer-board-host-hidden{display:none}' +
       '.mazer-board-host{height:82%}' +
       '.mazer-controls{height:82%;box-sizing:border-box;padding:10px 2px;overflow:auto}' +
-      '.mazer-controls-title{margin:0 0 6px;font-size:2rem}' +
-      '.mazer-controls-copy{margin:0 0 14px;color:#cbd5e1;font-size:1.1rem}' +
-      '.mazer-mode-button{display:block;width:100%;margin:10px 0;padding:14px;border:2px solid #38bdf8;border-radius:10px;background:#0f172a;color:#f8fafc;text-align:left}' +
-      '.mazer-mode-button:active{background:#164e63}' +
-      '.mazer-mode-button:disabled{opacity:.55}' +
-      '.mazer-mode-name{display:block;font-size:1.5rem;color:#fde047}' +
-      '.mazer-mode-copy{display:block;margin-top:5px;font-size:1rem;line-height:1.25;color:#d5f3e5}' +
+      '.mazer-hand-choosing_mode .mazer-controls{height:87%;padding:20px 7px 14px}' +
+      '.mazer-controls-title{display:inline-block;margin:0 0 7px;padding:5px 9px;background:#fde047;color:#111827;font-size:1.75rem;line-height:1;text-transform:uppercase;letter-spacing:.05em;box-shadow:4px 4px 0 #92400e}' +
+      '.mazer-controls-copy{margin:8px 0 18px;color:#cbd5e1;font-size:1.05rem}' +
+      '.mazer-mode-button{display:block;position:relative;width:calc(100% - 7px);min-height:118px;margin:14px 7px 19px 0;padding:17px 16px;overflow:hidden;border:3px solid #38bdf8;border-radius:0;background-color:#0f172a;background-image:linear-gradient(rgba(56,189,248,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(56,189,248,.08) 1px,transparent 1px);background-size:15px 15px;box-shadow:7px 7px 0 #020617;color:#f8fafc;text-align:left;-webkit-appearance:none;appearance:none}' +
+      '.mazer-mode-button[data-mode="rush"]{border-color:#f59e0b;background-image:linear-gradient(rgba(245,158,11,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(245,158,11,.08) 1px,transparent 1px)}' +
+      '.mazer-mode-button:hover,.mazer-mode-button:focus-visible{filter:brightness(1.2);outline:3px solid #f8fafc;outline-offset:2px}' +
+      '.mazer-mode-button:active{transform:translate(4px,4px);box-shadow:3px 3px 0 #020617}' +
+      '.mazer-mode-button:disabled{opacity:.55;transform:none}' +
+      '.mazer-mode-texture{position:absolute;z-index:0;top:0;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(6,1fr);pointer-events:none}' +
+      '.mazer-mode-texture-cell{display:block;border-right:1px solid rgba(148,163,184,.08);border-bottom:1px solid rgba(148,163,184,.08)}' +
+      '.mazer-mode-name{display:block;position:relative;z-index:1;font-size:1.45rem;line-height:1.05;color:#67e8f9;text-transform:uppercase;letter-spacing:.035em}' +
+      '.mazer-mode-button[data-mode="rush"] .mazer-mode-name{color:#fbbf24}' +
+      '.mazer-mode-copy{display:block;position:relative;z-index:1;margin-top:9px;font-size:.95rem;line-height:1.3;color:#d5f3e5}' +
+      '@media(max-width:240px){' +
+        '.mazer-hand{padding:10px}' +
+        '.mazer-hand-choosing_mode .mazer-title{font-size:1.7rem;padding:6px 8px;box-shadow:4px 4px 0 #0e7490}' +
+        '.mazer-hand-choosing_mode .mazer-controls{padding:17px 3px 10px}' +
+        '.mazer-controls-title{font-size:1.35rem;box-shadow:3px 3px 0 #92400e}' +
+        '.mazer-controls-copy{font-size:.9rem;margin-bottom:14px}' +
+        '.mazer-mode-button{width:calc(100% - 5px);min-height:130px;margin:12px 5px 16px 0;padding:13px 10px;border-width:2px;box-shadow:5px 5px 0 #020617}' +
+        '.mazer-mode-name{font-size:1.05rem}' +
+        '.mazer-mode-copy{margin-top:7px;font-size:.8rem;line-height:1.25}' +
+      '}' +
       '@keyframes mazer-hand-fire{0%{filter:brightness(1)}35%{filter:brightness(1.7)}100%{filter:brightness(1)}}'
     document.head.appendChild(style)
   }

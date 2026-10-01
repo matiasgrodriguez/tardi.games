@@ -1,6 +1,6 @@
 import { startMatch, sendToAllHands, endMatch } from '@juxhouse/tardi-core/table'
 import { createMazerBoard } from './shared/mazer-board.js'
-import { BOARD_SIZE, clearNode, createNode, getVisibleLaserCellCount, isValidTarget, targetsEqual } from './shared/mazer-geometry.js'
+import { BOARD_SIZE, clearNode, createNode, createVariedTileBackground, getVisibleLaserCellCount, isValidTarget, targetsEqual } from './shared/mazer-geometry.js'
 import { createMazerRound } from './shared/mazer-round.js'
 
 ;(function () {
@@ -42,6 +42,7 @@ import { createMazerRound } from './shared/mazer-round.js'
   var board = createMazerBoard({ interactive: false })
 
   installStyles()
+  root.style.backgroundImage = createVariedTileBackground({ r: 16, g: 24, b: 32 }, 18, 41, 1)
   document.body.appendChild(root)
   root.appendChild(header)
   header.appendChild(status)
@@ -783,7 +784,7 @@ import { createMazerRound } from './shared/mazer-round.js'
     style.textContent =
       ':root{font-size:calc(6px + 1.2vmin)}' +
       'html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101820;color:#f8fafc;font-family:Arial,sans-serif}' +
-      '.mazer-table{width:100%;height:100%;box-sizing:border-box;padding:2.4vw;display:block}' +
+      '.mazer-table{width:100%;height:100%;box-sizing:border-box;padding:2.4vw;display:block;background-color:#101820}' +
       '.mazer-table-simulating .mazer-board-host{animation:mazer-table-fire 180ms linear 1}' +
       '.mazer-header{height:8%;min-height:0}' +
       '.mazer-status{margin:.5vw 0 0;font-size:1.8rem;line-height:1.18;color:#d5f3e5}' +
@@ -794,7 +795,7 @@ import { createMazerRound } from './shared/mazer-round.js'
       '.mazer-board-host{display:inline-block;vertical-align:top;width:68%;height:100%}' +
       '.mazer-side{display:inline-block;vertical-align:top;width:29%;height:100%;margin-left:2%;box-sizing:border-box}' +
       '.mazer-panel-title{margin:0 0 1vw;font-size:1.7rem;line-height:1;color:#7dd3fc;text-transform:uppercase}' +
-      '.mazer-match-info,.mazer-scoreboard{border:2px solid #334155;border-radius:8px;background:#0f172a;padding:1.4vw;margin-bottom:1.5vw;box-sizing:border-box}' +
+      '.mazer-match-info,.mazer-scoreboard{border:3px solid #334155;border-radius:0;background:#0f172a;padding:1.4vw;margin:0 .6vw 2.1vw 0;box-shadow:.6vw .6vw 0 #020617;box-sizing:border-box}' +
       '.mazer-info-line{margin:.6vw 0;font-size:1.3rem;line-height:1.2;white-space:normal;color:#d5f3e5}' +
       '.mazer-score-row{display:block;overflow:hidden;margin:.8vw 0;font-size:1.7rem;line-height:1.2}' +
       '.mazer-score-name{float:left;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
