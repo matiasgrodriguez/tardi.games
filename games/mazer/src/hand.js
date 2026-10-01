@@ -30,9 +30,9 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
   document.body.appendChild(root)
   root.appendChild(header)
   header.appendChild(title)
+  header.appendChild(countdown)
   header.appendChild(roundLabel)
   header.appendChild(status)
-  header.appendChild(countdown)
   root.appendChild(controls)
   root.appendChild(boardHost)
   boardHost.appendChild(board.element)
@@ -387,14 +387,14 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
       'html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
       '.mazer-hand{width:100%;height:100%;box-sizing:border-box;padding:14px;display:block;background-color:#182128}' +
       '.mazer-hand-simulating .mazer-board-host{animation:mazer-hand-fire 180ms linear 1}' +
-      '.mazer-header{position:relative;height:18%;min-height:88px;padding-right:70px;box-sizing:border-box}' +
+      '.mazer-header{position:relative;height:18%;min-height:88px;box-sizing:border-box}' +
       '.mazer-hand-choosing_mode .mazer-header{height:13%;min-height:72px;border-bottom:4px solid #334155;padding-right:0}' +
       '.mazer-hand-choosing_mode .mazer-status,.mazer-hand-choosing_mode .mazer-round-label{display:none}' +
       '.mazer-title{display:inline-block;margin:0;font-size:2.2rem;line-height:1;font-weight:900}' +
       '.mazer-hand-choosing_mode .mazer-title{padding:7px 10px;background:#020617;color:#f8fafc;box-shadow:5px 5px 0 #0e7490;text-transform:uppercase;letter-spacing:.08em}' +
-      '.mazer-round-label{display:inline-block;margin:0 0 0 10px;font-size:1rem;color:#7dd3fc}' +
+      '.mazer-round-label{display:block;margin:5px 0 0;font-size:1rem;color:#7dd3fc}' +
       '.mazer-status{margin:7px 0 0;font-size:1.25rem;line-height:1.2;color:#d5f3e5}' +
-      '.mazer-countdown{position:absolute;top:0;right:0;min-width:54px;height:54px;border:3px solid #64748b;border-radius:8px;background:#111827;color:#f8fafc;font-size:2.6rem;line-height:54px;text-align:center;font-weight:900}' +
+      '.mazer-countdown{display:inline-block;vertical-align:top;min-width:48px;height:42px;margin:-5px 0 0 12px;border:3px solid #64748b;border-radius:0;background:#111827;color:#f8fafc;font-size:2.2rem;line-height:42px;text-align:center;font-weight:900;box-shadow:4px 4px 0 #020617}' +
       '.mazer-countdown-low{border-color:#f97316;color:#fed7aa}' +
       '.mazer-countdown-hidden,.mazer-controls-hidden,.mazer-board-host-hidden{display:none}' +
       '.mazer-board-host{height:82%}' +
