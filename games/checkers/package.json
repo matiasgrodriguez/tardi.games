@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "tardi-build",
+    "predev": "npm update @juxhouse/tardi-build @juxhouse/tardi-core || true",
     "dev": "tardi-build dev"
   },
   "dependencies": {

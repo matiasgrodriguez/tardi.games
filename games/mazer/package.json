@@ -1,10 +1,11 @@
 {
   "name": "tardi-game-mazer",
-  "version": "0.0.0",
-  "description": "Mazer, a Tardi game.",
+  "version": "0.0.1",
+  "description": "Mazer: Find where the laser exists the mazer as fast as you can!",
   "private": true,
   "scripts": {
     "build": "tardi-build",
+    "predev": "npm update @juxhouse/tardi-build @juxhouse/tardi-core || true",
     "dev": "tardi-build dev"
   },
   "dependencies": {
