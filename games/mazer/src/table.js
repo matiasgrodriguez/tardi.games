@@ -70,6 +70,11 @@ import { createMazerRound } from './shared/mazer-round.js'
     }
 
     if (phase === 'waiting_for_players') {
+      if (players.length === 1) {
+        beginMatch(MODE_EVERYONE)
+        return
+      }
+
       phase = 'choosing_mode'
       broadcast()
       return

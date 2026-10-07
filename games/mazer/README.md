@@ -10,7 +10,8 @@ players to guess where the laser will exit.
 - A match lasts eight rounds: two easy, three medium, and three hard.
 - A tie after round eight starts sudden-death hard boards until one leader
   remains.
-- Before each match, a player chooses Everyone Guesses or Laser Rush.
+- Solo matches start immediately in Everyone Guesses mode. Before multiplayer
+  matches, a player chooses Everyone Guesses or Laser Rush.
 - In Everyone Guesses, every player gets one hidden prediction. The round ends
   after everyone submits or time expires. Correct predictions earn 10 points,
   plus speed bonuses of 3, 2, and 1 for the first three correct players.
