@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tardi-build",
     "predev": "npm update @juxhouse/tardi-build @juxhouse/tardi-core || true",
-    "dev": "tardi-build dev"
+    "dev": "tardi-build dev",
+    "test": "node test/mazer.test.mjs"
   },
   "dependencies": {
     "@juxhouse/tardi-core": "*"

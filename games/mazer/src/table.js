@@ -1,29 +1,24 @@
 import { startMatch, sendToAllHands, endMatch } from '@juxhouse/tardi-core/table'
 import { createMazerBoard } from './shared/mazer-board.js'
 import { BOARD_SIZE, clearNode, createNode, createVariedTileBackground, getVisibleLaserCellCount, isValidTarget, targetsEqual } from './shared/mazer-geometry.js'
-import { createMazerRound } from './shared/mazer-round.js'
+import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
 
 ;(function () {
   var GAME_NAME = 'Mazer'
-  var MODE_EVERYONE = 'everyone'
-  var MODE_RUSH = 'rush'
   var MATCH_ROUNDS = 8
   var GUESS_MS = 12000
   var LASER_CELLS_PER_VELOCITY_TICK = 10
   var LASER_VELOCITY_TICK_MS = 100
   var LASER_ANIMATION_TICK_MS = 35
   var SCORING_MS = 2600
-  var POINTS_CORRECT = 10
-  var SPEED_BONUSES = [3, 2, 1]
 
   var players = []
   var scoresByPlayerId = {}
   var phase = 'waiting_for_players'
-  var mode = MODE_EVERYONE
   var roundNumber = 0
   var roundSequence = 0
-  var suddenDeathNumber = 0
-  var suddenDeathPlayerIds = []
+  var match = null
+  var resolvedShots = []
   var round = null
   var winners = []
   var timerId = 0
@@ -70,13 +65,7 @@ import { createMazerRound } from './shared/mazer-round.js'
     }
 
     if (phase === 'waiting_for_players') {
-      if (players.length === 1) {
-        beginMatch(MODE_EVERYONE)
-        return
-      }
-
-      phase = 'choosing_mode'
-      broadcast()
+      beginMatch()
       return
     }
 
@@ -95,13 +84,6 @@ import { createMazerRound } from './shared/mazer-round.js'
       return
     }
 
-    if (action.type === 'start_match') {
-      if (phase === 'choosing_mode' && isValidMode(action.mode)) {
-        beginMatch(action.mode)
-      }
-      return
-    }
-
     if (action.type !== 'submit_guess' || phase !== 'guessing' || !round) {
       return
     }
@@ -109,18 +91,17 @@ import { createMazerRound } from './shared/mazer-round.js'
     receiveGuess(event.playerId, action.target)
   }
 
-  function beginMatch(nextMode) {
+  function beginMatch() {
     stopEverything()
-    mode = nextMode
     scoresByPlayerId = {}
     ensureScores()
     roundNumber = 0
     roundSequence = 0
-    suddenDeathNumber = 0
-    suddenDeathPlayerIds = []
     winners = []
     round = null
-    startNextRound(false)
+    match = createMazerMatch()
+    resolvedShots = []
+    startNextRound()
   }
 
   function receiveGuess(playerId, target) {
@@ -130,20 +111,18 @@ import { createMazerRound } from './shared/mazer-round.js'
       return
     }
 
+    if (Date.now() >= round.endsAt) {
+      resolveRound('timeout')
+      return
+    }
+
     guess = {
       target: { side: target.side, coordinate: Number(target.coordinate) },
       correct: false,
       submittedAt: Date.now(),
-      submittedOrder: round.nextGuessOrder,
     }
-    round.nextGuessOrder += 1
     guess.correct = targetsEqual(guess.target, round.correctTarget)
     round.guessesByPlayerId[playerId] = guess
-
-    if (mode === MODE_RUSH && guess.correct) {
-      resolveRound('correct_guess')
-      return
-    }
 
     if (allEligiblePlayersGuessed()) {
       resolveRound('all_guessed')
@@ -153,24 +132,18 @@ import { createMazerRound } from './shared/mazer-round.js'
     broadcast()
   }
 
-  function startNextRound(isSuddenDeath) {
+  function startNextRound() {
     var generated
 
     stopEverything()
 
-    if (isSuddenDeath) {
-      suddenDeathNumber += 1
-    } else {
-      roundNumber += 1
-    }
-
+    roundNumber += 1
     roundSequence += 1
-    generated = createMazerRound(roundNumber, isSuddenDeath)
+    generated = match.rounds[roundNumber - 1]
+    var startedAt = Date.now()
     round = {
       id: roundSequence,
       number: roundNumber,
-      isSuddenDeath: isSuddenDeath,
-      suddenDeathNumber: isSuddenDeath ? suddenDeathNumber : 0,
       difficulty: generated.difficulty,
       mirrorCount: generated.mirrorCount,
       pathLength: generated.pathLength,
@@ -180,11 +153,11 @@ import { createMazerRound } from './shared/mazer-round.js'
       cannon: generated.cannon,
       laserPath: generated.laserPath,
       correctTarget: generated.correctTarget,
-      eligiblePlayerIds: getRoundPlayerIds(isSuddenDeath),
+      eligiblePlayerIds: getPlayerIds(players),
       guessesByPlayerId: {},
-      nextGuessOrder: 0,
       pointsByPlayerId: {},
-      endsAt: Date.now() + GUESS_MS,
+      startedAt: startedAt,
+      endsAt: startedAt + GUESS_MS,
       resolutionReason: '',
       simulationStartedAt: 0,
       scored: false,
@@ -230,20 +203,17 @@ import { createMazerRound } from './shared/mazer-round.js'
   function advanceAfterScoring() {
     var leaders
 
-    if (round.isSuddenDeath || roundNumber >= MATCH_ROUNDS) {
+    if (roundNumber >= MATCH_ROUNDS) {
       leaders = getLeadingPlayers()
-
-      if (leaders.length === 1 || players.length < 2) {
-        finishMatch(leaders)
-        return
-      }
-
-      suddenDeathPlayerIds = getPlayerIds(leaders)
-      startNextRound(true)
+      finishMatch(leaders)
       return
     }
-
-    startNextRound(false)
+    resolvedShots.push({
+      cannon: cloneTarget(round.cannon),
+      target: cloneTarget(round.correctTarget),
+      laserPath: cloneLaserPath(round.laserPath),
+    })
+    startNextRound()
   }
 
   function finishMatch(leaders) {
@@ -258,44 +228,17 @@ import { createMazerRound } from './shared/mazer-round.js'
   }
 
   function applyScores() {
-    var correctGuesses = []
     var index
     var playerId
     var guess
     var points
-
     round.pointsByPlayerId = {}
-
     for (index = 0; index < round.eligiblePlayerIds.length; index += 1) {
       playerId = round.eligiblePlayerIds[index]
       guess = round.guessesByPlayerId[playerId]
-
-      if (guess && guess.correct) {
-        correctGuesses.push({
-          playerId: playerId,
-          submittedAt: guess.submittedAt,
-          submittedOrder: guess.submittedOrder,
-        })
-      }
-    }
-
-    correctGuesses.sort(function (left, right) {
-      return (left.submittedAt - right.submittedAt) || (left.submittedOrder - right.submittedOrder)
-    })
-
-    for (index = 0; index < correctGuesses.length; index += 1) {
-      playerId = correctGuesses[index].playerId
-      points = POINTS_CORRECT
-
-      if (mode === MODE_EVERYONE && round.eligiblePlayerIds.length > 1 && index < SPEED_BONUSES.length) {
-        points += SPEED_BONUSES[index]
-      }
-
-      if (typeof scoresByPlayerId[playerId] !== 'number') {
-        scoresByPlayerId[playerId] = 0
-      }
-
-      scoresByPlayerId[playerId] += points
+      if (!guess || !guess.correct) continue
+      points = getGuessPoints(guess.submittedAt - round.startedAt, GUESS_MS)
+      scoresByPlayerId[playerId] = (scoresByPlayerId[playerId] || 0) + points
       round.pointsByPlayerId[playerId] = points
     }
   }
@@ -311,13 +254,12 @@ import { createMazerRound } from './shared/mazer-round.js'
     return {
       name: GAME_NAME,
       phase: phase,
-      mode: mode,
-      modeName: getModeName(mode),
       matchRounds: MATCH_ROUNDS,
       statusText: getStatusText(),
       board: {
         width: BOARD_SIZE,
         height: BOARD_SIZE,
+        resolvedShots: resolvedShots.slice(),
         mirrors: round ? cloneMirrors(round.mirrors) : [],
       },
       round: round ? cloneRound() : null,
@@ -331,8 +273,6 @@ import { createMazerRound } from './shared/mazer-round.js'
     return {
       id: round.id,
       number: round.number,
-      isSuddenDeath: round.isSuddenDeath,
-      suddenDeathNumber: round.suddenDeathNumber,
       difficulty: round.difficulty,
       mirrorCount: round.mirrorCount,
       pathLength: round.pathLength,
@@ -377,8 +317,6 @@ import { createMazerRound } from './shared/mazer-round.js'
     return {
       name: state.name,
       phase: state.phase,
-      mode: state.mode,
-      modeName: state.modeName,
       matchRounds: state.matchRounds,
       statusText: state.statusText,
       board: state.board,
@@ -406,7 +344,7 @@ import { createMazerRound } from './shared/mazer-round.js'
 
   function renderMatchInfo(state) {
     var heading = createNode('h2', 'mazer-panel-title')
-    var modeText = createNode('p', 'mazer-info-line')
+    var scoringText = createNode('p', 'mazer-info-line')
     var roundText = createNode('p', 'mazer-info-line')
     var difficultyText = createNode('p', 'mazer-info-line')
 
@@ -414,19 +352,17 @@ import { createMazerRound } from './shared/mazer-round.js'
     heading.textContent = 'Match'
     matchInfo.appendChild(heading)
 
-    if (state.phase === 'waiting_for_players' || state.phase === 'choosing_mode') {
-      modeText.textContent = 'Choose a mode on any hand.'
-      matchInfo.appendChild(modeText)
+    if (state.phase === 'waiting_for_players') {
+      scoringText.textContent = 'Waiting for players.'
+      matchInfo.appendChild(scoringText)
       return
     }
 
-    modeText.textContent = state.modeName
-    matchInfo.appendChild(modeText)
+    scoringText.textContent = 'Correct: 100 points + up to 100 for speed'
+    matchInfo.appendChild(scoringText)
 
     if (state.round) {
-      roundText.textContent = state.round.isSuddenDeath
-        ? 'Sudden death ' + String(state.round.suddenDeathNumber)
-        : 'Round ' + String(state.round.number) + ' of ' + String(state.matchRounds)
+      roundText.textContent = 'Round ' + String(state.round.number) + ' of ' + String(state.matchRounds)
       difficultyText.textContent = capitalize(state.round.difficulty) + ' · ' +
         String(state.round.pathLength) + ' cells · ' + String(state.round.mirrorHits) + ' turns'
       matchInfo.appendChild(roundText)
@@ -467,13 +403,10 @@ import { createMazerRound } from './shared/mazer-round.js'
     var correctPlayers
 
     if (players.length < 1) return 'Waiting for at least one player.'
-    if (phase === 'choosing_mode') return 'Choose Everyone Guesses or Laser Rush on a hand.'
     if (phase === 'game_over') return getGameOverText()
     if (!round) return 'Preparing the board.'
 
     if (phase === 'guessing') {
-      if (round.isSuddenDeath) return 'Sudden death: tied leaders are tracing the laser.'
-      if (mode === MODE_RUSH) return 'First correct prediction wins the round.'
       return 'Waiting for every player to lock in a prediction.'
     }
 
@@ -530,18 +463,6 @@ import { createMazerRound } from './shared/mazer-round.js'
     return leaders
   }
 
-  function getRoundPlayerIds(isSuddenDeath) {
-    var source = isSuddenDeath ? suddenDeathPlayerIds : getPlayerIds(players)
-    var output = []
-    var index
-
-    for (index = 0; index < source.length; index += 1) {
-      if (isCurrentPlayer(source[index])) output.push(source[index])
-    }
-
-    return output
-  }
-
   function getPlayerIds(sourcePlayers) {
     var output = []
     var index
@@ -593,14 +514,6 @@ import { createMazerRound } from './shared/mazer-round.js'
       if (players[index].playerId === playerId) return true
     }
     return false
-  }
-
-  function isValidMode(value) {
-    return value === MODE_EVERYONE || value === MODE_RUSH
-  }
-
-  function getModeName(value) {
-    return value === MODE_RUSH ? 'Laser Rush' : 'Everyone Guesses'
   }
 
   function ensureScores() {
@@ -712,6 +625,8 @@ import { createMazerRound } from './shared/mazer-round.js'
   function resetToWaiting() {
     stopEverything()
     phase = 'waiting_for_players'
+    resolvedShots = []
+    match = null
     round = null
     winners = []
     broadcast()

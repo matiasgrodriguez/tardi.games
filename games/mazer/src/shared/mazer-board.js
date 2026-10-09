@@ -6,6 +6,7 @@ var BASE_GRAY = 50
 var CELL_GAP = 0
 var LASER_AMBER = { r: 255, g: 176, b: 0 }
 var LASER_AMBER_RGB = 'rgb(255,176,0)'
+var LASER_HISTORY = { r: 115, g: 80, b: 12 }
 var SELECTED_TARGET_BLUE = { r: 20, g: 104, b: 130 }
 var WRONG_TARGET_RED = { r: 220, g: 38, b: 38 }
 var CANNON_SLIDE_CELLS_PER_100_MS = 8
@@ -183,6 +184,7 @@ export function createMazerBoard(options) {
     var selectedSpriteSide = ''
     var selectedSpriteColor = null
     var signature
+    var historical = isHistoricalEndpoint(target)
 
     if (cannon && targetsEqual(cannon, target)) {
       className += ' mazer-edge-cannon'
@@ -208,6 +210,11 @@ export function createMazerBoard(options) {
       selectedSprite = true
       selectedSpriteSide = target.side
       selectedSpriteColor = WRONG_TARGET_RED
+    }
+
+    if (historical && !arrowSide && !selectedSprite && !(correct && targetsEqual(correct, target))) {
+      baseColor = LASER_HISTORY
+      variationRange = 2
     }
 
     signature = className + '|' +
@@ -239,21 +246,24 @@ export function createMazerBoard(options) {
     var path = state && state.round ? state.round.laserPath : []
     var mirror = findMirror(mirrors, record.x, record.y)
     var pathSteps = findLaserPathSteps(path, record.x, record.y)
+    var activeSteps = pathSteps.slice()
+    var shots = state && state.board ? state.board.resolvedShots || [] : []
+    var shotIndex
+    for (shotIndex = 0; shotIndex < shots.length; shotIndex += 1) {
+      pathSteps = pathSteps.concat(findLaserPathSteps(shots[shotIndex].laserPath, record.x, record.y))
+    }
     var className = 'mazer-cell'
     var signature
 
     if (mirror) {
       className += ' mazer-cell-mirror mazer-cell-mirror-' + mirror.type
-      if (pathSteps.length > 0) {
-        className += ' mazer-cell-mirror-lit'
-      }
     }
 
     if (pathSteps.length > 0) {
       className += ' mazer-cell-laser'
     }
 
-    signature = className + '|' + getPathStepsSignature(pathSteps)
+    signature = className + '|' + getPathStepsSignature(pathSteps) + '|active:' + getPathStepsSignature(activeSteps)
 
     if (record.signature === signature) {
       return
@@ -273,11 +283,12 @@ export function createMazerBoard(options) {
       false,
       false,
       '',
-      null
+      null,
+      activeSteps
     )
   }
 
-  function updateInnerCells(record, seedX, seedY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite, selectedSpriteSide, selectedSpriteColor) {
+  function updateInnerCells(record, seedX, seedY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite, selectedSpriteSide, selectedSpriteColor, activeSteps) {
     var innerY
     var innerX
     var index
@@ -299,19 +310,23 @@ export function createMazerBoard(options) {
           glowSprite,
           selectedSprite,
           selectedSpriteSide,
-          selectedSpriteColor
+          selectedSpriteColor,
+          activeSteps
         )
       }
     }
   }
 
-  function updateInnerCell(inner, seedX, seedY, innerX, innerY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite, selectedSpriteSide, selectedSpriteColor) {
+  function updateInnerCell(inner, seedX, seedY, innerX, innerY, baseColor, variationRange, arrowSide, pathSteps, glowAll, glowSprite, selectedSprite, selectedSpriteSide, selectedSpriteColor, activeSteps) {
     var isCannonSprite = isCannonSpriteCell(arrowSide, innerX, innerY)
     var isLaserSprite = isLaserSpriteCell(pathSteps || [], innerX, innerY)
     var mirrorTriangles = getMirrorTriangles(pathSteps || [], innerX, innerY)
     var isMirrorGlowSuppressed = isMirrorGlowSuppressedCell(pathSteps || [], innerX, innerY)
     var isSelectedSprite = selectedSprite && isSelectedSpriteCell(selectedSpriteSide, innerX, innerY)
+    var activeTriangles = getMirrorTriangles(activeSteps || [], innerX, innerY)
+    var historical = activeSteps && !isLaserSpriteCell(activeSteps, innerX, innerY)
     var innerBaseColor = getInnerBaseColor(baseColor, isCannonSprite, isLaserSprite && mirrorTriangles.length < 1, isSelectedSprite, selectedSpriteColor)
+    if (historical && isLaserSprite && mirrorTriangles.length < 1) innerBaseColor = LASER_HISTORY
     var className = 'mazer-inner-cell'
 
     clearNode(inner)
@@ -333,7 +348,7 @@ export function createMazerBoard(options) {
       className += ' mazer-cannon-sprite-cell'
     }
 
-    if ((isLaserSprite && !isMirrorGlowSuppressed) || glowAll || (glowSprite && isCannonSprite)) {
+    if ((!historical && isLaserSprite && !isMirrorGlowSuppressed) || glowAll || (glowSprite && isCannonSprite)) {
       className += ' mazer-laser-sprite-cell'
     }
 
@@ -344,7 +359,7 @@ export function createMazerBoard(options) {
     inner.className = className
 
     if (mirrorTriangles.length > 0) {
-      appendMirrorTriangles(inner, mirrorTriangles)
+      appendMirrorTriangles(inner, mirrorTriangles, activeTriangles)
     }
   }
 
@@ -607,6 +622,15 @@ export function createMazerBoard(options) {
     return { side: 'left', coordinate: (BOARD_SIZE * 4) - 1 - normalized }
   }
 
+  function isHistoricalEndpoint(target) {
+    var shots = state && state.board ? state.board.resolvedShots || [] : []
+    var index
+    for (index = 0; index < shots.length; index += 1) {
+      if (targetsEqual(shots[index].cannon, target) || targetsEqual(shots[index].target, target)) return true
+    }
+    return false
+  }
+
   function hasVisibleLaser(round) {
     return !!(round && round.laserPath && round.laserPath.length > 0)
   }
@@ -706,13 +730,13 @@ export function createMazerBoard(options) {
     return triangles
   }
 
-  function appendMirrorTriangles(inner, clipPaths) {
+  function appendMirrorTriangles(inner, clipPaths, activeTriangles) {
     var index
     var triangle
 
     for (index = 0; index < clipPaths.length; index += 1) {
       triangle = createNode('span', 'mazer-mirror-triangle')
-      triangle.style.backgroundColor = LASER_AMBER_RGB
+      triangle.style.backgroundColor = activeTriangles.indexOf(clipPaths[index]) < 0 ? 'rgb(115,80,12)' : LASER_AMBER_RGB
       triangle.style.webkitClipPath = clipPaths[index]
       triangle.style.clipPath = clipPaths[index]
       inner.appendChild(triangle)
@@ -1066,7 +1090,6 @@ function installMazerBoardStyles() {
     '.mazer-cell-mirror:after{content:"";position:absolute;left:16.666%;top:16.666%;width:94.281%;height:0;box-sizing:border-box;border-top:3px solid #93c5fd;transform-origin:left center;z-index:2}' +
     '.mazer-cell-mirror-slash:after{left:16.666%;top:83.333%;transform:rotate(-45deg)}' +
     '.mazer-cell-mirror-backslash:after{left:16.666%;top:16.666%;transform:rotate(45deg)}' +
-    '.mazer-cell-mirror-lit:after{border-top-color:#ffb000;box-shadow:0 0 4px rgba(255,213,79,.9),0 0 8px rgba(255,176,0,.7),0 0 14px rgba(255,176,0,.45),0 0 22px rgba(255,111,0,.28)}' +
     '.mazer-laser-sprite-cell{box-shadow:0 0 4px rgba(255,213,79,.9),0 0 8px rgba(255,176,0,.7),0 0 14px rgba(255,176,0,.45),0 0 22px rgba(255,111,0,.28);z-index:1}'
   document.head.appendChild(style)
 }

@@ -6,34 +6,28 @@ players to guess where the laser will exit.
 
 ## Current Rules
 
-- Supports every player admitted by the lobby (currently one to five players).
-- A match lasts eight rounds: two easy, three medium, and three hard.
-- A tie after round eight starts sudden-death hard boards until one leader
-  remains.
-- Solo matches start immediately in Everyone Guesses mode. Before multiplayer
-  matches, a player chooses Everyone Guesses or Laser Rush.
-- In Everyone Guesses, every player gets one hidden prediction. The round ends
-  after everyone submits or time expires. Correct predictions earn 10 points,
-  plus speed bonuses of 3, 2, and 1 for the first three correct players.
-- In Laser Rush, every player gets one prediction. An incorrect prediction
-  locks only that player out; the first correct prediction ends the round and
-  earns 10 points.
-- Solo games use the same eight-round match and scoring structure.
-- Difficulty is based on the traced laser path, including its length and the
-  number of mirrors actually hit, rather than the total mirror count alone.
-- The generator rejects loops and short returns near the cannon, including the
-  trivial neighboring-cell U shape.
-- Both Table and Hand show the board.
-- The Hand sends the target guess immediately when the player selects an outer
-  coordinate.
-- The Table shows the remaining guessing time.
-- During simulation, the Table and Hands progressively reveal the laser path.
-- The Table broadcasts the correct target to Hands only after that animation
-  ends.
-- The Table owns the generated board, laser simulation, scoring, and timing.
-- Wrong guessed coordinates are shown in red after the round resolves.
-- Once there is one winner, the game reports that result to the Tardi platform,
-  which provides the standard replay flow.
+- Supports one to five players with the same rules and automatic match start.
+- Every match ends after eight rounds; tied leaders share the win.
+- All eight rounds use one fixed 9 x 9 layout with 18–27 mirrors.
+- The cannon moves between distinct routes: two easy, three medium, three hard.
+- Difficulty uses the existing path-length and mirror-hit bands. Bounce counts
+  can overlap within and between bands; they do not strictly increase each round.
+- The generator plans all eight routes together, preferring a maze that satisfies
+  every band. If none is found within the generation budget, it uses the closest
+  complete plan. Loops, trivial same-edge returns, and previously used routes
+  (including their reverse direction) are excluded.
+- Every player gets one hidden prediction and 12 seconds to submit it.
+- The round resolves after everyone submits or time expires.
+- Correct predictions earn 100 points plus a speed bonus:
+  `floor(100 * remaining guessing time / 12 seconds)`. Incorrect or missing
+  predictions earn zero. Solo players receive the same speed bonus.
+- Both Table and Hand show the board and progressively animate each resolved shot.
+- Earlier shots remain dimly visible for the rest of the match, even if nobody
+  guessed correctly. The current shot is bright; crossing beams do not interact.
+- The correct exit reaches Hands after the animation finishes. Guesses stay
+  hidden during guessing, and incorrect targets appear red after resolution.
+- The Table owns maze generation, laser simulation, scoring, and timing.
+- Results are reported to the Tardi platform for its standard replay flow.
 
 ## UI Rendering Rules
 
@@ -48,3 +42,8 @@ players to guess where the laser will exit.
   Escape it first or insert it with `textContent`.
 - Dynamic board rendering should prioritize predictable performance. If a large
   template becomes hard to reason about, use small DOM helpers for that part.
+
+## Validation
+
+Run `npm test` for maze-generation, scoring, and match-flow regression checks.
+Run `npm run build` to compile Table and Hand bundles.

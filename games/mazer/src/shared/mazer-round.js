@@ -1,82 +1,176 @@
 import { BOARD_SIZE } from './mazer-geometry.js'
 
 var MAX_GENERATION_ATTEMPTS = 800
-var CANNON_MIRROR_AXIS_ODDS = 0.7
 
 var DIFFICULTIES = {
-  easy: { mirrorCount: 7, minPath: 7, maxPath: 20, minHits: 1, maxHits: 4 },
-  medium: { mirrorCount: 12, minPath: 12, maxPath: 32, minHits: 2, maxHits: 7 },
-  hard: { mirrorCount: 18, minPath: 18, maxPath: 60, minHits: 3, maxHits: 12 },
+  easy: { minPath: 7, maxPath: 20, minHits: 1, maxHits: 4 },
+  medium: { minPath: 12, maxPath: 32, minHits: 2, maxHits: 7 },
+  hard: { minPath: 18, maxPath: 60, minHits: 3, maxHits: 12 },
 }
 
-export function getDifficultyForRound(roundNumber, isSuddenDeath) {
-  if (isSuddenDeath || roundNumber >= 6) {
-    return 'hard'
-  }
-
-  if (roundNumber >= 3) {
-    return 'medium'
-  }
-
+export function getDifficultyForRound(roundNumber) {
+  if (roundNumber >= 6) return 'hard'
+  if (roundNumber >= 3) return 'medium'
   return 'easy'
 }
 
-export function createMazerRound(roundNumber, isSuddenDeath, random) {
-  var difficulty = getDifficultyForRound(roundNumber, isSuddenDeath)
-  var rules = DIFFICULTIES[difficulty]
+// Plan all shots together so the mirrors stay fixed and no route is reused
+// from either endpoint. The existing path-length and bounce bands still apply.
+export function createMazerMatch(random) {
   var randomNumber = random || Math.random
   var best = null
   var bestPenalty = Infinity
   var attempt
+  var mirrors
+  var routes
+  var rounds
+  var used
+  var total
+  var number
+  var slot
+  var selectedCount
+  var selectionOrder = [6, 7, 8, 3, 4, 5, 1, 2]
+  var rules
+  var index
   var candidate
+  var chosen
   var penalty
+  var chosenPenalty
 
   for (attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt += 1) {
-    candidate = createCandidate(rules.mirrorCount, randomNumber)
-
-    if (candidate.correctTarget.side === 'loop') {
-      continue
+    // Vary density to find enough distinct routes for all three bands.
+    mirrors = createMirrors(18 + randomInt(10, randomNumber), randomNumber)
+    routes = createRoutes(mirrors)
+    rounds = assignDifficultyBands(routes)
+    if (rounds) return { mirrors: mirrors, rounds: rounds }
+    rounds = []
+    used = {}
+    total = 0
+    selectedCount = 0
+    // Reserve the scarce long routes before assigning the easier shots.
+    for (slot = 0; slot < selectionOrder.length; slot += 1) {
+      number = selectionOrder[slot]
+      rules = DIFFICULTIES[getDifficultyForRound(number)]
+      chosen = null
+      chosenPenalty = Infinity
+      for (index = 0; index < routes.length; index += 1) {
+        candidate = routes[index]
+        if (used[targetKey(candidate.cannon)] || used[targetKey(candidate.correctTarget)]) continue
+        // Short same-edge returns are never useful prediction puzzles.
+        if (isTrivialReturn(candidate.cannon, candidate.correctTarget)) continue
+        penalty = getDifficultyPenalty(candidate, rules)
+        if (penalty < chosenPenalty) {
+          chosen = candidate
+          chosenPenalty = penalty
+        }
+      }
+      if (!chosen) break
+      used[targetKey(chosen.cannon)] = true
+      used[targetKey(chosen.correctTarget)] = true
+      chosen.number = number
+      chosen.difficulty = getDifficultyForRound(number)
+      rounds[number - 1] = chosen
+      selectedCount += 1
+      total += chosenPenalty
     }
-
-    penalty = getDifficultyPenalty(candidate, rules)
-
-    if (penalty < bestPenalty) {
-      best = candidate
-      bestPenalty = penalty
+    if (selectedCount === 8 && total < bestPenalty) {
+      best = { mirrors: mirrors, rounds: rounds }
+      bestPenalty = total
     }
-
-    if (penalty === 0) {
-      break
-    }
+    if (bestPenalty === 0) break
   }
-
-  // A straight beam always gives us a valid fallback even if an unusually
-  // hostile random source produced only loops during candidate generation.
+  // Empty geometry always has enough distinct, non-returning routes.
   if (!best) {
-    best = createCandidate(0, randomNumber)
+    mirrors = []
+    routes = createRoutes(mirrors)
+    rounds = routes.slice(0, 8)
+    for (number = 1; number <= 8; number += 1) {
+      rounds[number - 1].number = number
+      rounds[number - 1].difficulty = getDifficultyForRound(number)
+    }
+    best = { mirrors: mirrors, rounds: rounds }
   }
-
-  best.number = roundNumber
-  best.difficulty = difficulty
-  best.generationAttempts = attempt + 1
   return best
 }
 
-function createCandidate(mirrorCount, random) {
-  var mirrors = createMirrors(mirrorCount, random)
-  var cannon = createCannon(mirrors, random)
-  var traced = traceLaser(mirrors, cannon)
-
-  return {
-    mirrorCount: mirrorCount,
-    mirrors: mirrors,
-    cannon: cannon,
-    laserPath: traced.path,
-    correctTarget: traced.target,
-    pathLength: traced.path.length,
-    mirrorHits: countMirrorHits(traced.path),
-    repeatedCells: countRepeatedCells(traced.path),
+// A route can fit several bands. Reassign earlier choices when necessary
+// rather than consuming an easy route that a later slot needs.
+function assignDifficultyBands(routes) {
+  var unique = []
+  var seen = {}
+  var owners = []
+  var selected = []
+  var index
+  var route
+  var key
+  var number
+  for (index = 0; index < routes.length; index += 1) {
+    route = routes[index]
+    if (isTrivialReturn(route.cannon, route.correctTarget)) continue
+    key = [targetKey(route.cannon), targetKey(route.correctTarget)].sort().join('|')
+    if (seen[key]) continue
+    seen[key] = true
+    unique.push(route)
   }
+  function assign(slot, visited) {
+    var routeIndex
+    var previous
+    var rules = DIFFICULTIES[getDifficultyForRound(slot + 1)]
+    for (routeIndex = 0; routeIndex < unique.length; routeIndex += 1) {
+      if (visited[routeIndex] || getDifficultyPenalty(unique[routeIndex], rules) !== 0) continue
+      visited[routeIndex] = true
+      previous = owners[routeIndex]
+      if (typeof previous === 'number' && !assign(previous, visited)) continue
+      owners[routeIndex] = slot
+      selected[slot] = unique[routeIndex]
+      return true
+    }
+    return false
+  }
+  for (number = 1; number <= 8; number += 1) {
+    if (!assign(number - 1, {})) return null
+  }
+  for (number = 1; number <= 8; number += 1) {
+    selected[number - 1].number = number
+    selected[number - 1].difficulty = getDifficultyForRound(number)
+  }
+  return selected
+}
+
+export function getGuessPoints(elapsedMs, durationMs) {
+  var remaining = Math.max(0, Math.min(durationMs, durationMs - elapsedMs))
+  return 100 + Math.floor(100 * remaining / durationMs)
+}
+
+function targetKey(target) {
+  return target.side + ':' + target.coordinate
+}
+
+function createRoutes(mirrors) {
+  var routes = []
+  var sides = ['left', 'top', 'right', 'bottom']
+  var side
+  var coordinate
+  var cannon
+  var traced
+  for (side = 0; side < sides.length; side += 1) {
+    for (coordinate = 0; coordinate < BOARD_SIZE; coordinate += 1) {
+      cannon = createCannon(sides[side], coordinate)
+      traced = traceLaser(mirrors, cannon)
+      if (traced.target.side === 'loop') continue
+      routes.push({
+        mirrorCount: mirrors.length,
+        mirrors: mirrors,
+        cannon: cannon,
+        laserPath: traced.path,
+        correctTarget: traced.target,
+        pathLength: traced.path.length,
+        mirrorHits: countMirrorHits(traced.path),
+        repeatedCells: countRepeatedCells(traced.path),
+      })
+    }
+  }
+  return routes
 }
 
 function getDifficultyPenalty(candidate, rules) {
@@ -139,77 +233,11 @@ function createMirrors(count, random) {
   return mirrors
 }
 
-function createCannon(mirrors, random) {
-  var side = ['left', 'top', 'right', 'bottom'][randomInt(4, random)]
-  var coordinate = createCannonCoordinate(side, mirrors, random)
-
-  if (side === 'left') {
-    return { side: side, coordinate: coordinate, x: 0, y: coordinate, direction: 'right' }
-  }
-
-  if (side === 'right') {
-    return { side: side, coordinate: coordinate, x: BOARD_SIZE - 1, y: coordinate, direction: 'left' }
-  }
-
-  if (side === 'top') {
-    return { side: side, coordinate: coordinate, x: coordinate, y: 0, direction: 'down' }
-  }
-
+function createCannon(side, coordinate) {
+  if (side === 'left') return { side: side, coordinate: coordinate, x: 0, y: coordinate, direction: 'right' }
+  if (side === 'right') return { side: side, coordinate: coordinate, x: BOARD_SIZE - 1, y: coordinate, direction: 'left' }
+  if (side === 'top') return { side: side, coordinate: coordinate, x: coordinate, y: 0, direction: 'down' }
   return { side: side, coordinate: coordinate, x: coordinate, y: BOARD_SIZE - 1, direction: 'up' }
-}
-
-function createCannonCoordinate(side, mirrors, random) {
-  var options
-
-  if (random() >= CANNON_MIRROR_AXIS_ODDS) {
-    return randomInt(BOARD_SIZE, random)
-  }
-
-  options = side === 'left' || side === 'right'
-    ? getMirrorRows(mirrors)
-    : getMirrorColumns(mirrors)
-
-  if (options.length < 1) {
-    return randomInt(BOARD_SIZE, random)
-  }
-
-  return options[randomInt(options.length, random)]
-}
-
-function getMirrorRows(mirrors) {
-  var rows = []
-  var seen = {}
-  var index
-  var y
-
-  for (index = 0; index < mirrors.length; index += 1) {
-    y = mirrors[index].y
-
-    if (!seen[y]) {
-      seen[y] = true
-      rows.push(y)
-    }
-  }
-
-  return rows
-}
-
-function getMirrorColumns(mirrors) {
-  var columns = []
-  var seen = {}
-  var index
-  var x
-
-  for (index = 0; index < mirrors.length; index += 1) {
-    x = mirrors[index].x
-
-    if (!seen[x]) {
-      seen[x] = true
-      columns.push(x)
-    }
-  }
-
-  return columns
 }
 
 export function traceLaser(mirrors, cannon) {

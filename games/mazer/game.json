@@ -1,6 +1,6 @@
 {
   "title": "Mazer",
-  "description": "Predict where the laser exits a shifting mirror maze before time runs out.",
+  "description": "Predict where the laser exits a mirror maze before time runs out.",
   "sharedScreen": "optional",
   "players": [1, 2, 3, 4, 5]
 }
