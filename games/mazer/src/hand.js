@@ -383,7 +383,7 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     var style = document.createElement('style')
     style.textContent =
       ':root{font-size:calc(6px + 1.2vmin)}' +
-      'html,body{margin:0;width:100%;min-height:100%;overflow-x:hidden;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
+      'html,body{margin:0;width:100%;height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
       '.mazer-hand{width:100%;min-height:100vh;box-sizing:border-box;padding:14px;display:block;background-color:#182128}' +
       '.mazer-hand-simulating .mazer-board-host{animation:mazer-hand-fire 180ms linear 1}' +
       '.mazer-header{position:relative;box-sizing:border-box;min-height:76px;padding-right:80px}' +
