@@ -1,9 +1,10 @@
-import { startMatch, sendToAllHands, endMatch } from '@juxhouse/tardi-core/table'
+import { startMatch, sendToAllHands, endMatch, hasSharedScreen } from '@juxhouse/tardi-core/table'
 import { createMazerBoard } from './shared/mazer-board.js'
 import { BOARD_SIZE, clearNode, createNode, createVariedTileBackground, getVisibleLaserCellCount, isValidTarget, targetsEqual } from './shared/mazer-geometry.js'
 import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
 
 ;(function () {
+  var sharedScreen = hasSharedScreen()
   var GAME_NAME = 'Mazer'
   var MATCH_ROUNDS = 8
   var GUESS_MS = 12000
@@ -25,30 +26,44 @@ import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
   var countdownTimerId = 0
   var laserAnimationTimerId = 0
 
-  var root = createNode('main', 'mazer-table')
-  var header = createNode('header', 'mazer-header')
-  var status = createNode('p', 'mazer-status')
-  var countdown = createNode('div', 'mazer-countdown mazer-countdown-hidden')
-  var content = createNode('section', 'mazer-content')
-  var boardHost = createNode('div', 'mazer-board-host')
-  var sidePanel = createNode('aside', 'mazer-side')
-  var matchInfo = createNode('div', 'mazer-match-info')
-  var scoreboard = createNode('div', 'mazer-scoreboard')
-  var board = createMazerBoard({ interactive: false })
+  var root = null
+  var header = null
+  var status = null
+  var countdown = null
+  var content = null
+  var boardHost = null
+  var sidePanel = null
+  var matchInfo = null
+  var scoreboard = null
+  var board = null
 
-  installStyles()
-  root.style.backgroundImage = createVariedTileBackground({ r: 16, g: 24, b: 32 }, 18, 41, 1)
-  document.body.appendChild(root)
-  root.appendChild(header)
-  header.appendChild(status)
-  header.appendChild(countdown)
-  root.appendChild(content)
-  content.appendChild(boardHost)
-  boardHost.appendChild(board.element)
-  content.appendChild(sidePanel)
-  sidePanel.appendChild(matchInfo)
-  sidePanel.appendChild(scoreboard)
-  render()
+  if (sharedScreen) {
+    root = createNode('main', 'mazer-table')
+    header = createNode('header', 'mazer-header')
+    status = createNode('p', 'mazer-status')
+    countdown = createNode('div', 'mazer-countdown mazer-countdown-hidden')
+    content = createNode('section', 'mazer-content')
+    boardHost = createNode('div', 'mazer-board-host')
+    sidePanel = createNode('aside', 'mazer-side')
+    matchInfo = createNode('div', 'mazer-match-info')
+    scoreboard = createNode('div', 'mazer-scoreboard')
+    board = createMazerBoard({ interactive: false })
+
+    installStyles()
+    root.style.backgroundImage = createVariedTileBackground({ r: 16, g: 24, b: 32 }, 18, 41, 1)
+    document.body.appendChild(root)
+    root.appendChild(header)
+    header.appendChild(status)
+    header.appendChild(countdown)
+    root.appendChild(content)
+    content.appendChild(boardHost)
+    boardHost.appendChild(board.element)
+    content.appendChild(sidePanel)
+    sidePanel.appendChild(matchInfo)
+    sidePanel.appendChild(scoreboard)
+    render()
+
+  }
 
   startMatch({
     onMessage: onMessage,
@@ -253,6 +268,7 @@ import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
   function createPublicState() {
     return {
       name: GAME_NAME,
+      hasSharedScreen: sharedScreen,
       phase: phase,
       matchRounds: MATCH_ROUNDS,
       statusText: getStatusText(),
@@ -289,6 +305,8 @@ import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
   }
 
   function render(publicState) {
+    if (!sharedScreen) return
+
     var state = publicState || createPublicState()
 
     root.className = 'mazer-table mazer-table-' + state.phase
@@ -316,6 +334,7 @@ import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
   function copyState(state) {
     return {
       name: state.name,
+      hasSharedScreen: state.hasSharedScreen,
       phase: state.phase,
       matchRounds: state.matchRounds,
       statusText: state.statusText,
@@ -646,6 +665,7 @@ import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
   }
 
   function startCountdown() {
+    if (!sharedScreen) return
     stopCountdown()
     renderCountdown()
     countdownTimerId = window.setInterval(renderCountdown, 250)
@@ -659,6 +679,7 @@ import { createMazerMatch, getGuessPoints } from './shared/mazer-round.js'
   }
 
   function startLaserAnimation() {
+    if (!sharedScreen) return
     stopLaserAnimation()
     laserAnimationTimerId = window.setInterval(render, LASER_ANIMATION_TICK_MS)
   }

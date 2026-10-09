@@ -21,7 +21,11 @@ players to guess where the laser will exit.
 - Correct predictions earn 100 points plus a speed bonus:
   `floor(100 * remaining guessing time / 12 seconds)`. Incorrect or missing
   predictions earn zero. Solo players receive the same speed bonus.
-- Both Table and Hand show the board and progressively animate each resolved shot.
+- With a shared screen, Table and Hand show the board and animate each shot.
+- In phone-only games, the hidden Table skips UI creation, rendering, and display
+  timers. Hands show wrapping Match and Scores panels below the maze.
+- The Hand reserves space for status text at the current width so phase changes
+  do not shift the board. Panels and long player names can scroll without clipping.
 - Earlier shots remain dimly visible for the rest of the match, even if nobody
   guessed correctly. The current shot is bright; crossing beams do not interact.
 - The correct exit reaches Hands after the animation finishes. Guesses stay

@@ -39,6 +39,7 @@ export function createMazerBoard(options) {
   return {
     element: root,
     render: render,
+    resize: resize,
     destroy: destroy,
   }
 

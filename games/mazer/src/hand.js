@@ -15,9 +15,15 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
   var root = createNode('main', 'mazer-hand')
   var header = createNode('header', 'mazer-header')
   var title = createNode('h1', 'mazer-title')
+  var roundInfo = createNode('div', 'mazer-round-info')
   var roundLabel = createNode('p', 'mazer-round-label')
   var status = createNode('p', 'mazer-status')
-  var countdown = createNode('div', 'mazer-countdown mazer-countdown-hidden')
+  var countdown = createNode('span', 'mazer-countdown mazer-countdown-hidden')
+  var statusMeasure = createNode('p', 'mazer-status mazer-status-measure')
+  var panels = createNode('section', 'mazer-panels mazer-panels-hidden')
+  var matchInfo = createNode('div', 'mazer-match-info')
+  var scoreboard = createNode('div', 'mazer-scoreboard')
+  var panelSignature = ''
   var boardHost = createNode('div', 'mazer-board-host')
   var board = createMazerBoard({
     interactive: true,
@@ -29,12 +35,20 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
   document.body.appendChild(root)
   root.appendChild(header)
   header.appendChild(title)
-  header.appendChild(countdown)
-  header.appendChild(roundLabel)
+  header.appendChild(roundInfo)
+  roundInfo.appendChild(roundLabel)
+  roundInfo.appendChild(countdown)
   header.appendChild(status)
+  header.appendChild(statusMeasure)
+  statusMeasure.setAttribute('aria-hidden', 'true')
   root.appendChild(boardHost)
   boardHost.appendChild(board.element)
+  root.appendChild(panels)
+  panels.appendChild(matchInfo)
+  panels.appendChild(scoreboard)
+  window.addEventListener('resize', updateLayout)
   render()
+  updateLayout()
 
   joinMatch({ onStateChange: onStateChange })
 
@@ -69,6 +83,7 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     }
 
     render()
+    updateLayout()
   }
 
   function onBoardTargetSelected(target) {
@@ -94,6 +109,100 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     roundLabel.textContent = getRoundLabel(state)
     status.textContent = getStatusText(state, phase)
     renderCountdown()
+    renderPanels(state)
+    board.render(createRenderState(state), selectedTarget)
+  }
+
+  function renderPanels(state) {
+    var show = state && state.hasSharedScreen === false
+    var signature
+    var heading
+    var line
+    var summaries
+    var index
+    var row
+    var name
+    var score
+    panels.className = show ? 'mazer-panels' : 'mazer-panels mazer-panels-hidden'
+    if (!show) return
+    signature = JSON.stringify([state.phase === 'game_over', state.round && state.round.number, state.players])
+    if (signature === panelSignature) return
+    panelSignature = signature
+    clearNode(matchInfo)
+    clearNode(scoreboard)
+    heading = createNode('h2', 'mazer-panel-title')
+    heading.textContent = 'Match'
+    matchInfo.appendChild(heading)
+    line = createNode('p', 'mazer-info-line')
+    line.textContent = getRoundLabel(state)
+    matchInfo.appendChild(line)
+    if (state.round) {
+      line = createNode('p', 'mazer-info-line')
+      line.textContent = state.round.difficulty.charAt(0).toUpperCase() + state.round.difficulty.slice(1) + ' · ' +
+        String(state.round.pathLength) + ' cells · ' + String(state.round.mirrorHits) + ' turns'
+      matchInfo.appendChild(line)
+    }
+    line = createNode('p', 'mazer-info-line')
+    line.textContent = 'Correct: 100 points + up to 100 for speed'
+    matchInfo.appendChild(line)
+    heading = createNode('h2', 'mazer-panel-title')
+    heading.textContent = state.phase === 'game_over' ? 'Final scores' : 'Scores'
+    scoreboard.appendChild(heading)
+    summaries = state.players.slice().sort(function (left, right) { return right.score - left.score })
+    for (index = 0; index < summaries.length; index += 1) {
+      row = createNode('div', 'mazer-score-row')
+      name = createNode('span', 'mazer-score-name')
+      score = createNode('strong', 'mazer-score-value')
+      name.textContent = summaries[index].nick
+      score.textContent = String(summaries[index].score)
+      row.appendChild(name)
+      row.appendChild(score)
+      scoreboard.appendChild(row)
+    }
+  }
+
+  // Reserve the tallest possible status for the current roster and width.
+  // Shorter statuses reuse that space, keeping the board still between phases.
+  function updateLayout() {
+    var state = getTableState()
+    var candidates = [
+      'Connecting to table.',
+      'You joined during this round. You will play in the next one.',
+      'Guess locked. Waiting for the round to finish.',
+      'Choose an exit. Everyone gets one attempt.',
+      'Correct! +200 points.',
+      'You share the win!',
+    ]
+    var names = []
+    var joinedNames
+    var height = 0
+    var index
+    var style
+    var available
+    var width
+    if (state) {
+      candidates.push(state.statusText || '')
+      for (index = 0; index < state.players.length; index += 1) {
+        names.push(state.players[index].nick)
+        candidates.push(state.players[index].nick + ' wins the match!')
+      }
+      joinedNames = names.length > 2
+        ? names.slice(0, names.length - 1).join(', ') + ', and ' + names[names.length - 1]
+        : names.join(' and ')
+      candidates.push(joinedNames + ' share the win!')
+      candidates.push(joinedNames + ' found the exit.')
+    }
+    for (index = 0; index < candidates.length; index += 1) {
+      statusMeasure.textContent = candidates[index]
+      height = Math.max(height, statusMeasure.offsetHeight)
+    }
+    status.style.height = String(height) + 'px'
+    style = window.getComputedStyle(root)
+    width = root.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    available = window.innerHeight - header.offsetHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - 6
+    // Phone-only panels flow below a full-width board; scroll rather than clip.
+    boardHost.style.height = String(state && state.hasSharedScreen === false ? width : Math.min(width, Math.max(110, available))) + 'px'
+    board.resize()
     board.render(createRenderState(state), selectedTarget)
   }
 
@@ -183,6 +292,7 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
   function copyState(state) {
     return {
       name: state.name,
+      hasSharedScreen: state.hasSharedScreen,
       phase: state.phase,
       matchRounds: state.matchRounds,
       statusText: state.statusText,
@@ -247,7 +357,7 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     var remainingMs
     var seconds
     if (!state || state.phase !== 'guessing' || !state.round) {
-      countdown.textContent = ''
+      countdown.textContent = '12s remaining'
       countdown.className = 'mazer-countdown mazer-countdown-hidden'
       return
     }
@@ -255,7 +365,7 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     if (remainingMs < 0) remainingMs = 0
     seconds = Math.ceil(remainingMs / 1000)
     countdown.className = seconds <= 3 ? 'mazer-countdown mazer-countdown-low' : 'mazer-countdown'
-    countdown.textContent = String(seconds)
+    countdown.textContent = String(seconds) + 's remaining'
   }
 
   function getVisibleLaserPath(path) {
@@ -271,17 +381,28 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     var style = document.createElement('style')
     style.textContent =
       ':root{font-size:calc(6px + 1.2vmin)}' +
-      'html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
-      '.mazer-hand{width:100%;height:100%;box-sizing:border-box;padding:14px;display:block;background-color:#182128}' +
+      'html,body{margin:0;width:100%;min-height:100%;overflow-x:hidden;background:#1f2329;color:#f8fafc;font-family:Arial,sans-serif}' +
+      '.mazer-hand{width:100%;min-height:100vh;box-sizing:border-box;padding:14px;display:block;background-color:#182128}' +
       '.mazer-hand-simulating .mazer-board-host{animation:mazer-hand-fire 180ms linear 1}' +
-      '.mazer-header{position:relative;height:18%;min-height:88px;box-sizing:border-box}' +
-      '.mazer-title{display:inline-block;margin:0;font-size:2.2rem;line-height:1;font-weight:900}' +
-      '.mazer-round-label{display:block;margin:5px 0 0;font-size:1rem;color:#7dd3fc}' +
-      '.mazer-status{margin:7px 0 0;font-size:1.25rem;line-height:1.2;color:#d5f3e5}' +
-      '.mazer-countdown{display:inline-block;vertical-align:top;min-width:48px;height:42px;margin:-5px 0 0 12px;border:3px solid #64748b;border-radius:0;background:#111827;color:#f8fafc;font-size:2.2rem;line-height:42px;text-align:center;font-weight:900;box-shadow:4px 4px 0 #020617}' +
-      '.mazer-countdown-low{border-color:#f97316;color:#fed7aa}' +
-      '.mazer-countdown-hidden{display:none}' +
-      '.mazer-board-host{height:82%}' +
+      '.mazer-header{position:relative;box-sizing:border-box;min-height:76px;padding-right:80px}' +
+      '.mazer-title{display:block;overflow-wrap:anywhere;margin:0;font-size:2.2rem;line-height:1;font-weight:900}' +
+      '.mazer-round-info{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;margin-top:4px;font-size:1rem;line-height:1.3}' +
+      '.mazer-round-label{margin:0;color:#7dd3fc}' +
+      '.mazer-status{margin:4px 0 0;font-size:1.25rem;line-height:1.2;color:#d5f3e5}' +
+      '.mazer-countdown{display:block;min-width:8em;white-space:nowrap;color:#f8fafc;font-weight:900;font-variant-numeric:tabular-nums}' +
+      '.mazer-countdown-low{color:#fed7aa}' +
+      '.mazer-countdown-hidden{visibility:hidden}' +
+      '.mazer-status{overflow-wrap:anywhere}' +
+      '.mazer-status-measure{position:absolute;left:0;right:80px;top:0;visibility:hidden;pointer-events:none}' +
+      '.mazer-board-host{margin-top:6px;width:100%}' +
+      '.mazer-panels{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;padding-bottom:4px}' +
+      '.mazer-panels-hidden{display:none}' +
+      '.mazer-match-info,.mazer-scoreboard{flex:1 1 150px;min-width:0;box-sizing:border-box;border:2px solid #334155;background:#0f172a;padding:10px;box-shadow:3px 3px 0 #020617;overflow-wrap:anywhere}' +
+      '.mazer-panel-title{margin:0 0 8px;font-size:1.5rem;line-height:1.1;color:#7dd3fc;text-transform:uppercase}' +
+      '.mazer-info-line{margin:6px 0;font-size:1.15rem;line-height:1.3;color:#d5f3e5}' +
+      '.mazer-score-row{display:flex;align-items:baseline;gap:8px;margin:6px 0;font-size:1.3rem;line-height:1.3}' +
+      '.mazer-score-name{flex:1;min-width:0;overflow-wrap:anywhere}' +
+      '.mazer-score-value{flex:none;color:#fde047}' +
       '@media(max-width:240px){' +
         '.mazer-hand{padding:10px}' +
       '}' +

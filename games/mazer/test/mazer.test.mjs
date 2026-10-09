@@ -38,20 +38,22 @@ test('speed points depend on elapsed time, with bounded integer bonuses', () => 
   assert.deepEqual([-100, 0, 3000, 6000, 11999, 12000, 13000].map(ms => rounds.getGuessPoints(ms, 12000)), [200, 200, 175, 150, 100, 100, 100])
 })
 
-function matchHarness(playerCount) {
+function matchHarness(playerCount, sharedScreen = true) {
   let now = 100000, nextTimer = 0, callbacks, state, result
   const timers = new Map()
+  let intervalCount = 0
   const node = () => ({ style: {}, appendChild() {}, firstChild: null })
   const context = {
     ...geometry, ...rounds,
+    hasSharedScreen: () => sharedScreen,
     createMazerMatch: () => rounds.createMazerMatch(seeded(17)),
-    createNode: node, createVariedTileBackground: () => '', clearNode() {},
+    createNode: (...args) => { assert(sharedScreen, 'hidden Table must not create UI nodes'); return node(...args) }, createVariedTileBackground: () => '', clearNode() {},
     createMazerBoard: () => ({ element: node(), render() {} }),
     document: { body: node(), head: node(), createElement: node },
     Date: { now: () => now },
     window: {
       setTimeout(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay }); return id },
-      clearTimeout(id) { timers.delete(id) }, setInterval() { return ++nextTimer }, clearInterval() {},
+      clearTimeout(id) { timers.delete(id) }, setInterval() { intervalCount++; return ++nextTimer }, clearInterval() {},
     },
     startMatch: opts => { callbacks = opts },
     sendToAllHands: next => { state = next }, endMatch: next => { result = next },
@@ -60,6 +62,7 @@ function matchHarness(playerCount) {
   callbacks.onPlayersChange({ players: Array.from({length: playerCount}, (_, i) => ({playerId: 'p' + i, nick: 'Player ' + i})) })
   return {
     get state() { return state }, get result() { return result },
+    get intervalCount() { return intervalCount },
     elapse(ms) { now += ms },
     guess(id, target) { callbacks.onMessage({playerId: id, messageFromHand: {type: 'submit_guess', target}}) },
     correct() { return rounds.traceLaser(state.board.mirrors, state.round.cannon).target },
@@ -110,4 +113,18 @@ test('solo earns speed points and tied matches finish after exactly eight rounds
   assert.equal(tied.state.phase, 'game_over')
   assert.equal(tied.state.winners.length, 2)
   assert.equal(tied.result.victor, null)
+})
+
+
+test('phone-only Table skips all rendering and animation loops while running the match', () => {
+  const game = matchHarness(1, false)
+  assert.equal(game.state.hasSharedScreen, false)
+  for (let i = 0; i < 8; i++) {
+    game.elapse(3000)
+    game.guess('p0', game.correct())
+    game.next(); game.next()
+  }
+  assert.equal(game.state.phase, 'game_over')
+  assert.equal(game.state.scoresByPlayerId.p0, 8 * 175)
+  assert.equal(game.intervalCount, 0)
 })
