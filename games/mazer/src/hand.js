@@ -200,9 +200,11 @@ import { clearNode, createNode, createVariedTileBackground, getVisibleLaserCellC
     style = window.getComputedStyle(root)
     width = root.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
     available = window.innerHeight - header.offsetHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - 6
-    // Fullscreen can make a phone-only viewport wider than it is tall.
-    // Keep every exit visible at once, with scrolling only needed to reach
-    // the panels below the maze.
+    if (state && state.hasSharedScreen === false) {
+      available -= panels.offsetHeight + parseFloat(window.getComputedStyle(panels).marginTop)
+    }
+    // Give the maze all remaining space after the header and phone-only
+    // panels. Scrolling stays available for unusually small viewports.
     boardHost.style.height = String(Math.min(width, Math.max(110, available))) + 'px'
     board.resize()
     board.render(createRenderState(state), selectedTarget)
